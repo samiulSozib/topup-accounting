@@ -269,7 +269,7 @@ const ViewSupplierPage = () => {
       currency: 'BDT',
       minimumFractionDigits: 0,
       maximumFractionDigits: 0
-    }).format(amount).replace('BDT', '৳');
+    }).format(amount).replace('BDT', 'AFG');
   };
 
   const formatCompactNumber = (num: number): string => {
