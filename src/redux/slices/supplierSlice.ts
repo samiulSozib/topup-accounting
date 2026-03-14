@@ -1,331 +1,383 @@
-// redux/slices/supplierSlice.ts
+// store/slices/supplierSlice.ts
+
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
-import axios, { AxiosError } from 'axios';
-import { 
-  ISupplier, 
-  ISupplierCreate, 
-  ISupplierUpdate, 
-  ISupplierPercentageUpdate,
-  ISupplierStatusUpdate,
-  ISupplierResponse,
-  ISupplierState 
-} from '../../type/supplier';
+import axios from 'axios';
+import {
+  Supplier,
+  SupplierResponse,
+  SingleSupplierResponse,
+  SupplierStatisticsResponse,
+  CreateSupplierRequest,
+  UpdateSupplierRequest,
+  Pagination
+} from '../../type';
+import { ApiError } from '../../type/api';
 
-const BASE_URL = import.meta.env.VITE_BASE_URL || '';
+const API_URL = import.meta.env.VITE_BASE_URL || '';
 
-// Initial state
-const initialState: ISupplierState = {
-  suppliers: [],
-  selectedSupplier: null,
-  isLoading: false,
-  error: null,
-  pagination: null,
-};
-
-interface ErrorResponse {
-  message?: string;
+interface SupplierState {
+  suppliers: Supplier[];
+  selectedSupplier: Supplier | null;
+  supplierStatistics: SupplierStatisticsResponse | null;
+  loading: boolean;
+  error: string | null;
+  pagination: Pagination | null;
 }
 
-// Helper to get auth token
-const getAuthHeaders = () => {
-  const token = localStorage.getItem('token');
-  return {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  };
+const initialState: SupplierState = {
+  suppliers: [],
+  selectedSupplier: null,
+  supplierStatistics: null,
+  loading: false,
+  error: null,
+  pagination: null
 };
 
-// ==================== Async Thunks ====================
+interface FetchSuppliersParams {
+  page?: number;
+  item_per_page?: number;
+  search?: string;
+}
 
-// Get all suppliers with pagination and search
+interface FetchStatisticsParams {
+  id: number;
+  params?: {
+    page?: number;
+    limit?: number;
+    recent_count?: number;
+    show_all?: boolean;
+  };
+}
+
+interface UpdateSupplierData {
+  id: number;
+  data: UpdateSupplierRequest;
+}
+
+interface UpdatePercentageData {
+  id: number;
+  bonus_percentage: number;
+}
+
+interface DeleteResponse {
+  status: boolean;
+  message: string;
+}
+
+// Helper function to handle API errors
+const handleApiError = (error: unknown): string => {
+  const apiError = error as ApiError;
+  return apiError.response?.data?.message || apiError.message || 'An unexpected error occurred';
+};
+
+// Async Thunks
 export const fetchSuppliers = createAsyncThunk<
-  ISupplierResponse,
-  { page?: number; item_per_page?: number; search?: string } | undefined,
+  SupplierResponse,
+  FetchSuppliersParams,
   { rejectValue: string }
 >(
-  'supplier/fetchSuppliers',
-  async (params, { rejectWithValue }) => {
+  'suppliers/fetchSuppliers',
+  async ({ page = 1, item_per_page = 20, search = '' }, { rejectWithValue }) => {
     try {
-      const queryParams = new URLSearchParams();
-      if (params?.page) queryParams.append('page', params.page.toString());
-      if (params?.item_per_page) queryParams.append('item_per_page', params.item_per_page.toString());
-      if (params?.search) queryParams.append('search', params.search);
-
-      const url = `${BASE_URL}/suppliers${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
-      const response = await axios.get<ISupplierResponse>(url, getAuthHeaders());
+      const token = localStorage.getItem('token');
+      const response = await axios.get<SupplierResponse>(`${API_URL}/suppliers`, {
+        params: { page, item_per_page, search },
+        headers: { Authorization: `Bearer ${token}` }
+      });
       return response.data;
     } catch (error) {
-      const axiosError = error as AxiosError<ErrorResponse>;
-      return rejectWithValue(axiosError.response?.data?.message || 'Failed to fetch suppliers');
+      return rejectWithValue(handleApiError(error));
     }
   }
 );
 
-// Create new supplier
-export const createSupplier = createAsyncThunk<
-  ISupplierResponse,
-  ISupplierCreate,
-  { rejectValue: string }
->(
-  'supplier/createSupplier',
-  async (supplierData, { rejectWithValue }) => {
-    try {
-      const response = await axios.post<ISupplierResponse>(
-        `${BASE_URL}/suppliers`,
-        supplierData,
-        getAuthHeaders()
-      );
-      return response.data;
-    } catch (error) {
-      const axiosError = error as AxiosError<ErrorResponse>;
-      return rejectWithValue(axiosError.response?.data?.message || 'Failed to create supplier');
-    }
-  }
-);
-
-// Update supplier
-export const updateSupplier = createAsyncThunk<
-  ISupplierResponse,
-  { supplier_id: number; data: ISupplierUpdate },
-  { rejectValue: string }
->(
-  'supplier/updateSupplier',
-  async ({ supplier_id, data }, { rejectWithValue }) => {
-    try {
-      const response = await axios.put<ISupplierResponse>(
-        `${BASE_URL}/suppliers/${supplier_id}`,
-        data,
-        getAuthHeaders()
-      );
-      return response.data;
-    } catch (error) {
-      const axiosError = error as AxiosError<ErrorResponse>;
-      return rejectWithValue(axiosError.response?.data?.message || 'Failed to update supplier');
-    }
-  }
-);
-
-// Update supplier percentage only
-export const updateSupplierPercentage = createAsyncThunk<
-  ISupplierResponse,
-  { supplier_id: number; data: ISupplierPercentageUpdate },
-  { rejectValue: string }
->(
-  'supplier/updateSupplierPercentage',
-  async ({ supplier_id, data }, { rejectWithValue }) => {
-    try {
-      const response = await axios.patch<ISupplierResponse>(
-        `${BASE_URL}/suppliers/percentage/${supplier_id}`,
-        data,
-        getAuthHeaders()
-      );
-      return response.data;
-    } catch (error) {
-      const axiosError = error as AxiosError<ErrorResponse>;
-      return rejectWithValue(axiosError.response?.data?.message || 'Failed to update supplier percentage');
-    }
-  }
-);
-
-// Change supplier status
-export const changeSupplierStatus = createAsyncThunk<
-  ISupplierResponse,
-  { supplier_id: number; data: ISupplierStatusUpdate },
-  { rejectValue: string }
->(
-  'supplier/changeSupplierStatus',
-  async ({ supplier_id, data }, { rejectWithValue }) => {
-    try {
-      const response = await axios.patch<ISupplierResponse>(
-        `${BASE_URL}/suppliers/status/${supplier_id}`,
-        data,
-        getAuthHeaders()
-      );
-      return response.data;
-    } catch (error) {
-      const axiosError = error as AxiosError<ErrorResponse>;
-      return rejectWithValue(axiosError.response?.data?.message || 'Failed to change supplier status');
-    }
-  }
-);
-
-// Delete supplier
-export const deleteSupplier = createAsyncThunk<
-  { supplier_id: number; message: string },
+export const fetchSupplierById = createAsyncThunk<
+  SingleSupplierResponse,
   number,
   { rejectValue: string }
 >(
-  'supplier/deleteSupplier',
-  async (supplier_id, { rejectWithValue }) => {
+  'suppliers/fetchSupplierById',
+  async (id: number, { rejectWithValue }) => {
     try {
-      const response = await axios.delete<{ status: boolean; message: string }>(
-        `${BASE_URL}/suppliers/${supplier_id}`,
-        getAuthHeaders()
-      );
-      return { supplier_id, message: response.data.message };
+      const token = localStorage.getItem('token');
+      const response = await axios.get<SingleSupplierResponse>(`${API_URL}/suppliers/${id}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      return response.data;
     } catch (error) {
-      const axiosError = error as AxiosError<ErrorResponse>;
-      return rejectWithValue(axiosError.response?.data?.message || 'Failed to delete supplier');
+      return rejectWithValue(handleApiError(error));
     }
   }
 );
 
-// ==================== Slice ====================
+export const fetchSupplierStatistics = createAsyncThunk<
+  SupplierStatisticsResponse,
+  FetchStatisticsParams,
+  { rejectValue: string }
+>(
+  'suppliers/fetchSupplierStatistics',
+  async ({ id, params }, { rejectWithValue }) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.get<SupplierStatisticsResponse>(
+        `${API_URL}/topup/supplier/statistics/${id}`,
+        {
+          params,
+          headers: { Authorization: `Bearer ${token}` }
+        }
+      );
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(handleApiError(error));
+    }
+  }
+);
 
+export const createSupplier = createAsyncThunk<
+  SingleSupplierResponse,
+  CreateSupplierRequest,
+  { rejectValue: string }
+>(
+  'suppliers/createSupplier',
+  async (supplierData: CreateSupplierRequest, { rejectWithValue }) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.post<SingleSupplierResponse>(`${API_URL}/suppliers`, supplierData, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(handleApiError(error));
+    }
+  }
+);
+
+export const updateSupplier = createAsyncThunk<
+  SingleSupplierResponse,
+  UpdateSupplierData,
+  { rejectValue: string }
+>(
+  'suppliers/updateSupplier',
+  async ({ id, data }: UpdateSupplierData, { rejectWithValue }) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.put<SingleSupplierResponse>(`${API_URL}/suppliers/${id}`, data, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(handleApiError(error));
+    }
+  }
+);
+
+export const updateSupplierPercentage = createAsyncThunk<
+  SingleSupplierResponse,
+  UpdatePercentageData,
+  { rejectValue: string }
+>(
+  'suppliers/updateSupplierPercentage',
+  async ({ id, bonus_percentage }: UpdatePercentageData, { rejectWithValue }) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.patch<SingleSupplierResponse>(
+        `${API_URL}/suppliers/${id}/percentage`,
+        { bonus_percentage },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(handleApiError(error));
+    }
+  }
+);
+
+export const changeSupplierStatus = createAsyncThunk<
+  SingleSupplierResponse,
+  number,
+  { rejectValue: string }
+>(
+  'suppliers/changeSupplierStatus',
+  async (id: number, { rejectWithValue }) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.patch<SingleSupplierResponse>(
+        `${API_URL}/suppliers/${id}/status`,
+        {},
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(handleApiError(error));
+    }
+  }
+);
+
+export const deleteSupplier = createAsyncThunk<
+  { id: number; message: string },
+  number,
+  { rejectValue: string }
+>(
+  'suppliers/deleteSupplier',
+  async (id: number, { rejectWithValue }) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.delete<DeleteResponse>(
+        `${API_URL}/suppliers/${id}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      return { id, message: response.data.message };
+    } catch (error) {
+      return rejectWithValue(handleApiError(error));
+    }
+  }
+);
+
+// Slice
 const supplierSlice = createSlice({
-  name: 'supplier',
+  name: 'suppliers',
   initialState,
   reducers: {
-    clearError: (state) => {
+    clearSupplierError: (state) => {
       state.error = null;
     },
-    setSelectedSupplier: (state, action: PayloadAction<ISupplier | null>) => {
-      state.selectedSupplier = action.payload;
+    clearSelectedSupplier: (state) => {
+      state.selectedSupplier = null;
     },
-    clearSuppliers: (state) => {
-      state.suppliers = [];
-      state.pagination = null;
-    },
+    clearSupplierStatistics: (state) => {
+      state.supplierStatistics = null;
+    }
   },
   extraReducers: (builder) => {
-    // Fetch Suppliers
     builder
+      // Fetch Suppliers
       .addCase(fetchSuppliers.pending, (state) => {
-        state.isLoading = true;
+        state.loading = true;
         state.error = null;
       })
-      .addCase(fetchSuppliers.fulfilled, (state, action: PayloadAction<ISupplierResponse>) => {
-        state.isLoading = false;
-        state.suppliers = action.payload.suppliers || [];
-        state.pagination = action.payload.pagination || null;
-        state.error = null;
+      .addCase(fetchSuppliers.fulfilled, (state, action: PayloadAction<SupplierResponse>) => {
+        state.loading = false;
+        state.suppliers = action.payload.suppliers;
+        state.pagination = action.payload.pagination;
       })
-      .addCase(fetchSuppliers.rejected, (state, action) => {
-        state.isLoading = false;
+      .addCase(fetchSuppliers.rejected, (state, action: PayloadAction<string | undefined>) => {
+        state.loading = false;
         state.error = action.payload || 'Failed to fetch suppliers';
       })
 
-    // Create Supplier
-    builder
+      // Fetch Supplier By Id
+      .addCase(fetchSupplierById.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(fetchSupplierById.fulfilled, (state, action: PayloadAction<SingleSupplierResponse>) => {
+        state.loading = false;
+        state.selectedSupplier = action.payload.supplier;
+      })
+      .addCase(fetchSupplierById.rejected, (state, action: PayloadAction<string | undefined>) => {
+        state.loading = false;
+        state.error = action.payload || 'Failed to fetch supplier';
+      })
+
+      // Fetch Supplier Statistics
+      .addCase(fetchSupplierStatistics.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(fetchSupplierStatistics.fulfilled, (state, action: PayloadAction<SupplierStatisticsResponse>) => {
+        state.loading = false;
+        state.supplierStatistics = action.payload;
+      })
+      .addCase(fetchSupplierStatistics.rejected, (state, action: PayloadAction<string | undefined>) => {
+        state.loading = false;
+        state.error = action.payload || 'Failed to fetch supplier statistics';
+      })
+
+      // Create Supplier
       .addCase(createSupplier.pending, (state) => {
-        state.isLoading = true;
+        state.loading = true;
         state.error = null;
       })
-      .addCase(createSupplier.fulfilled, (state, action: PayloadAction<ISupplierResponse>) => {
-        state.isLoading = false;
-        if (action.payload.supplier) {
-          state.suppliers = [action.payload.supplier, ...state.suppliers];
-        }
-        state.error = null;
+      .addCase(createSupplier.fulfilled, (state, action: PayloadAction<SingleSupplierResponse>) => {
+        state.loading = false;
+        state.suppliers.unshift(action.payload.supplier);
       })
-      .addCase(createSupplier.rejected, (state, action) => {
-        state.isLoading = false;
+      .addCase(createSupplier.rejected, (state, action: PayloadAction<string | undefined>) => {
+        state.loading = false;
         state.error = action.payload || 'Failed to create supplier';
       })
 
-    // Update Supplier
-    builder
+      // Update Supplier
       .addCase(updateSupplier.pending, (state) => {
-        state.isLoading = true;
+        state.loading = true;
         state.error = null;
       })
-      .addCase(updateSupplier.fulfilled, (state, action: PayloadAction<ISupplierResponse>) => {
-        state.isLoading = false;
-        if (action.payload.supplier) {
-          const index = state.suppliers.findIndex(s => s.id === action.payload.supplier!.id);
-          if (index !== -1) {
-            state.suppliers[index] = action.payload.supplier;
-          }
-          if (state.selectedSupplier?.id === action.payload.supplier.id) {
-            state.selectedSupplier = action.payload.supplier;
-          }
+      .addCase(updateSupplier.fulfilled, (state, action: PayloadAction<SingleSupplierResponse>) => {
+        state.loading = false;
+        const index = state.suppliers.findIndex(s => s.id === action.payload.supplier.id);
+        if (index !== -1) {
+          state.suppliers[index] = action.payload.supplier;
         }
-        state.error = null;
+        if (state.selectedSupplier?.id === action.payload.supplier.id) {
+          state.selectedSupplier = action.payload.supplier;
+        }
       })
-      .addCase(updateSupplier.rejected, (state, action) => {
-        state.isLoading = false;
+      .addCase(updateSupplier.rejected, (state, action: PayloadAction<string | undefined>) => {
+        state.loading = false;
         state.error = action.payload || 'Failed to update supplier';
       })
 
-    // Update Supplier Percentage
-    builder
-      .addCase(updateSupplierPercentage.pending, (state) => {
-        state.isLoading = true;
-        state.error = null;
-      })
-      .addCase(updateSupplierPercentage.fulfilled, (state, action: PayloadAction<ISupplierResponse>) => {
-        state.isLoading = false;
-        if (action.payload.supplier) {
-          const index = state.suppliers.findIndex(s => s.id === action.payload.supplier!.id);
-          if (index !== -1) {
-            state.suppliers[index] = action.payload.supplier;
-          }
-          if (state.selectedSupplier?.id === action.payload.supplier.id) {
-            state.selectedSupplier = action.payload.supplier;
-          }
+      // Update Supplier Percentage
+      .addCase(updateSupplierPercentage.fulfilled, (state, action: PayloadAction<SingleSupplierResponse>) => {
+        const index = state.suppliers.findIndex(s => s.id === action.payload.supplier.id);
+        if (index !== -1) {
+          state.suppliers[index] = action.payload.supplier;
         }
-        state.error = null;
+        if (state.selectedSupplier?.id === action.payload.supplier.id) {
+          state.selectedSupplier = action.payload.supplier;
+        }
       })
-      .addCase(updateSupplierPercentage.rejected, (state, action) => {
-        state.isLoading = false;
+      .addCase(updateSupplierPercentage.rejected, (state, action: PayloadAction<string | undefined>) => {
         state.error = action.payload || 'Failed to update supplier percentage';
       })
 
-    // Change Supplier Status
-    builder
-      .addCase(changeSupplierStatus.pending, (state) => {
-        state.isLoading = true;
-        state.error = null;
-      })
-      .addCase(changeSupplierStatus.fulfilled, (state, action: PayloadAction<ISupplierResponse>) => {
-        state.isLoading = false;
-        if (action.payload.supplier) {
-          const index = state.suppliers.findIndex(s => s.id === action.payload.supplier!.id);
-          if (index !== -1) {
-            state.suppliers[index] = action.payload.supplier;
-          }
-          if (state.selectedSupplier?.id === action.payload.supplier.id) {
-            state.selectedSupplier = action.payload.supplier;
-          }
+      // Change Supplier Status
+      .addCase(changeSupplierStatus.fulfilled, (state, action: PayloadAction<SingleSupplierResponse>) => {
+        const index = state.suppliers.findIndex(s => s.id === action.payload.supplier.id);
+        if (index !== -1) {
+          state.suppliers[index] = action.payload.supplier;
         }
-        state.error = null;
+        if (state.selectedSupplier?.id === action.payload.supplier.id) {
+          state.selectedSupplier = action.payload.supplier;
+        }
       })
-      .addCase(changeSupplierStatus.rejected, (state, action) => {
-        state.isLoading = false;
+      .addCase(changeSupplierStatus.rejected, (state, action: PayloadAction<string | undefined>) => {
         state.error = action.payload || 'Failed to change supplier status';
       })
 
-    // Delete Supplier
-    builder
+      // Delete Supplier
       .addCase(deleteSupplier.pending, (state) => {
-        state.isLoading = true;
+        state.loading = true;
         state.error = null;
       })
-      .addCase(deleteSupplier.fulfilled, (state, action: PayloadAction<{ supplier_id: number; message: string }>) => {
-        state.isLoading = false;
-        state.suppliers = state.suppliers.filter(s => s.id !== action.payload.supplier_id);
-        if (state.selectedSupplier?.id === action.payload.supplier_id) {
+      .addCase(deleteSupplier.fulfilled, (state, action: PayloadAction<{ id: number; message: string }>) => {
+        state.loading = false;
+        state.suppliers = state.suppliers.filter(s => s.id !== action.payload.id);
+        if (state.selectedSupplier?.id === action.payload.id) {
           state.selectedSupplier = null;
         }
-        state.error = null;
       })
-      .addCase(deleteSupplier.rejected, (state, action) => {
-        state.isLoading = false;
+      .addCase(deleteSupplier.rejected, (state, action: PayloadAction<string | undefined>) => {
+        state.loading = false;
         state.error = action.payload || 'Failed to delete supplier';
       });
-  },
+  }
 });
 
-// ==================== Exports ====================
-
-export const { clearError, setSelectedSupplier, clearSuppliers } = supplierSlice.actions;
-
-// Selectors
-export const selectAllSuppliers = (state: { supplier: ISupplierState }) => state.supplier.suppliers;
-export const selectSelectedSupplier = (state: { supplier: ISupplierState }) => state.supplier.selectedSupplier;
-export const selectSupplierLoading = (state: { supplier: ISupplierState }) => state.supplier.isLoading;
-export const selectSupplierError = (state: { supplier: ISupplierState }) => state.supplier.error;
-export const selectSupplierPagination = (state: { supplier: ISupplierState }) => state.supplier.pagination;
+export const { 
+  clearSupplierError, 
+  clearSelectedSupplier, 
+  clearSupplierStatistics 
+} = supplierSlice.actions;
 
 export default supplierSlice.reducer;

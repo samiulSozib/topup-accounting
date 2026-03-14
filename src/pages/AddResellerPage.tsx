@@ -4,13 +4,14 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAppDispatch, useAppSelector } from '@/redux/hook';
+import { RootState } from '@/redux/store';
 import {
   createReseller,
   updateReseller,
-  selectResellerLoading,
-  selectSelectedReseller,
 } from '@/redux/slices/resellerSlice';
+import { CreateResellerRequest, UpdateResellerRequest } from '@/type/reseller';
 import { successAlert, errorAlert } from '@/util/alert';
+import { ArrowLeft, Users, Phone, MapPin, Percent, Save, X } from 'lucide-react';
 
 const AddResellerPage = () => {
   const { t } = useLanguage();
@@ -18,12 +19,18 @@ const AddResellerPage = () => {
   const location = useLocation();
   const dispatch = useAppDispatch();
   
-  const isLoading = useAppSelector(selectResellerLoading);
-  const selectedReseller = useAppSelector(selectSelectedReseller);
+  const isLoading = useAppSelector((state: RootState) => state.resellers.loading);
   
-  const editingReseller = location.state?.reseller || selectedReseller;
+  const editingReseller = location.state?.reseller;
 
   const [form, setForm] = useState({
+    name: '',
+    phone: '',
+    city: '',
+    bonus_percentage: '',
+  });
+
+  const [errors, setErrors] = useState({
     name: '',
     phone: '',
     city: '',
@@ -42,150 +49,268 @@ const AddResellerPage = () => {
   }, [editingReseller]);
 
   const validateForm = () => {
+    const newErrors = {
+      name: '',
+      phone: '',
+      city: '',
+      bonus_percentage: '',
+    };
+    let isValid = true;
+
     if (!form.name.trim()) {
-      errorAlert(t('nameRequired'));
-      return false;
+      newErrors.name = t('nameRequired');
+      isValid = false;
     }
+
     if (!form.phone.trim()) {
-      errorAlert(t('phoneRequired'));
-      return false;
+      newErrors.phone = t('phoneRequired');
+      isValid = false;
+    } else if (!/^[+]?[\d\s-]+$/.test(form.phone.trim())) {
+      newErrors.phone = t('invalidPhone');
+      isValid = false;
     }
+
     if (!form.city.trim()) {
-      errorAlert(t('cityRequired'));
-      return false;
+      newErrors.city = t('cityRequired');
+      isValid = false;
     }
+
     if (!form.bonus_percentage.trim()) {
-      errorAlert(t('bonusRequired'));
-      return false;
+      newErrors.bonus_percentage = t('bonusRequired');
+      isValid = false;
+    } else {
+      const bonus = parseFloat(form.bonus_percentage);
+      if (isNaN(bonus) || bonus < 0) {
+        newErrors.bonus_percentage = t('invalidBonus');
+        isValid = false;
+      } else if (bonus > 100) {
+        newErrors.bonus_percentage = t('bonusMaxExceeded');
+        isValid = false;
+      }
     }
-    const bonus = parseFloat(form.bonus_percentage);
-    if (isNaN(bonus) || bonus < 0) {
-      errorAlert(t('invalidBonus'));
-      return false;
-    }
-    return true;
+
+    setErrors(newErrors);
+    return isValid;
   };
 
   const handleSubmit = async () => {
     if (!validateForm()) return;
 
     try {
-      const resellerData = {
-        name: form.name,
-        phone: form.phone,
-        city: form.city,
-        bonus_percentage: parseFloat(form.bonus_percentage),
-      };
-
-      let result;
+      const bonusPercentage = parseFloat(form.bonus_percentage);
+      
       if (editingReseller) {
-        result = await dispatch(updateReseller({
-          reseller_id: editingReseller.id,
-          data: resellerData
-        }));
-      } else {
-        result = await dispatch(createReseller(resellerData));
-      }
+        const updateData: UpdateResellerRequest = {
+          name: form.name,
+          phone: form.phone,
+          city: form.city,
+          bonus_percentage: bonusPercentage,
+        };
 
-      if (createReseller.fulfilled.match(result) || updateReseller.fulfilled.match(result)) {
-        successAlert(t(editingReseller ? 'resellerUpdated' : 'resellerCreated'));
-        navigate('/resellers');
+        const result = await dispatch(updateReseller({
+          id: editingReseller.id,
+          data: updateData
+        }));
+
+        if (updateReseller.fulfilled.match(result)) {
+          successAlert(t('resellerUpdated'));
+          navigate('/resellers');
+        } else {
+          errorAlert(result.payload as string || t('operationFailed'));
+        }
+      } else {
+        const createData: CreateResellerRequest = {
+          name: form.name,
+          phone: form.phone,
+          city: form.city,
+          bonus_percentage: bonusPercentage,
+        };
+
+        const result = await dispatch(createReseller(createData));
+
+        if (createReseller.fulfilled.match(result)) {
+          successAlert(t('resellerCreated'));
+          navigate('/resellers');
+        } else {
+          errorAlert(result.payload as string || t('operationFailed'));
+        }
       }
     } catch (error) {
       errorAlert(t('operationFailed'));
     }
   };
 
+  const handleCancel = () => {
+    navigate('/resellers');
+  };
+
   return (
-    <div className="max-w-lg mx-auto">
-      <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="bg-card rounded-2xl border p-6 space-y-5">
-        <h1 className="text-xl font-bold text-foreground">
-          {editingReseller ? t('editReseller') : t('addReseller')}
-        </h1>
-
-        <div className="space-y-4">
-          <div>
-            <label className="text-sm font-medium text-foreground mb-1.5 block">
-              {t('resellerName')} <span className="text-destructive">*</span>
-            </label>
-            <input
-              className="w-full px-4 py-3 rounded-xl border bg-secondary text-foreground text-sm focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none transition-all"
-              value={form.name}
-              onChange={e => setForm({ ...form, name: e.target.value })}
-              disabled={isLoading}
-              placeholder="Enter reseller name"
-            />
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
+      <div className="max-w-2xl mx-auto px-4 py-6">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden"
+        >
+          {/* Header */}
+          <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+            <div className="flex items-center gap-4">
+              <button
+                onClick={handleCancel}
+                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              >
+                <ArrowLeft className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+              </button>
+              <div>
+                <h1 className="text-xl font-bold text-gray-900 dark:text-white">
+                  {editingReseller ? t('editReseller') : t('addReseller')}
+                </h1>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                  {editingReseller 
+                    ? t('editResellerDescription') 
+                    : t('addResellerDescription')}
+                </p>
+              </div>
+            </div>
           </div>
 
-          <div>
-            <label className="text-sm font-medium text-foreground mb-1.5 block">
-              {t('phone')} <span className="text-destructive">*</span>
-            </label>
-            <input
-              className="w-full px-4 py-3 rounded-xl border bg-secondary text-foreground text-sm focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none transition-all"
-              value={form.phone}
-              onChange={e => setForm({ ...form, phone: e.target.value })}
-              disabled={isLoading}
-              placeholder="017xxxxxxxx"
-            />
-            <p className="text-xs text-muted-foreground mt-1">{t('phoneHint')}</p>
-          </div>
+          {/* Form */}
+          <div className="p-6 space-y-6">
+            {/* Reseller Name */}
+            <div>
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 block">
+                {t('resellerName')} <span className="text-red-500">*</span>
+              </label>
+              <div className="relative">
+                <Users className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  className={`w-full pl-10 pr-4 py-3 rounded-lg border ${
+                    errors.name 
+                      ? 'border-red-300 focus:ring-red-200' 
+                      : 'border-gray-200 dark:border-gray-600 focus:ring-primary/30'
+                  } bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:border-primary outline-none transition-all`}
+                  value={form.name}
+                  onChange={e => setForm({ ...form, name: e.target.value })}
+                  disabled={isLoading}
+                  placeholder={t('resellerNamePlaceholder')}
+                />
+              </div>
+              {errors.name && (
+                <p className="text-xs text-red-500 mt-1">{errors.name}</p>
+              )}
+            </div>
 
-          <div>
-            <label className="text-sm font-medium text-foreground mb-1.5 block">
-              {t('city')} <span className="text-destructive">*</span>
-            </label>
-            <input
-              className="w-full px-4 py-3 rounded-xl border bg-secondary text-foreground text-sm focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none transition-all"
-              value={form.city}
-              onChange={e => setForm({ ...form, city: e.target.value })}
-              disabled={isLoading}
-              placeholder="Enter city name"
-            />
-          </div>
+            {/* Phone */}
+            <div>
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 block">
+                {t('phone')} <span className="text-red-500">*</span>
+              </label>
+              <div className="relative">
+                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  className={`w-full pl-10 pr-4 py-3 rounded-lg border ${
+                    errors.phone 
+                      ? 'border-red-300 focus:ring-red-200' 
+                      : 'border-gray-200 dark:border-gray-600 focus:ring-primary/30'
+                  } bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:border-primary outline-none transition-all`}
+                  value={form.phone}
+                  onChange={e => setForm({ ...form, phone: e.target.value })}
+                  disabled={isLoading}
+                  placeholder={t('phonePlaceholder')}
+                />
+              </div>
+              {errors.phone ? (
+                <p className="text-xs text-red-500 mt-1">{errors.phone}</p>
+              ) : (
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('phoneHint')}</p>
+              )}
+            </div>
 
-          <div>
-            <label className="text-sm font-medium text-foreground mb-1.5 block">
-              {t('bonusPercentage')} <span className="text-destructive">*</span>
-            </label>
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              className="w-full px-4 py-3 rounded-xl border bg-secondary text-foreground text-sm focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none transition-all"
-              value={form.bonus_percentage}
-              onChange={e => setForm({ ...form, bonus_percentage: e.target.value })}
-              disabled={isLoading}
-              placeholder="0.00"
-            />
-            <p className="text-xs text-muted-foreground mt-1">{t('bonusHint')}</p>
-          </div>
-        </div>
+            {/* City */}
+            <div>
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 block">
+                {t('city')} <span className="text-red-500">*</span>
+              </label>
+              <div className="relative">
+                <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  className={`w-full pl-10 pr-4 py-3 rounded-lg border ${
+                    errors.city 
+                      ? 'border-red-300 focus:ring-red-200' 
+                      : 'border-gray-200 dark:border-gray-600 focus:ring-primary/30'
+                  } bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:border-primary outline-none transition-all`}
+                  value={form.city}
+                  onChange={e => setForm({ ...form, city: e.target.value })}
+                  disabled={isLoading}
+                  placeholder={t('cityPlaceholder')}
+                />
+              </div>
+              {errors.city && (
+                <p className="text-xs text-red-500 mt-1">{errors.city}</p>
+              )}
+            </div>
 
-        <div className="flex gap-3 pt-2">
-          <button
-            onClick={() => navigate('/resellers')}
-            disabled={isLoading}
-            className="flex-1 py-3 rounded-xl bg-secondary text-secondary-foreground font-medium text-sm hover:bg-muted transition-colors disabled:opacity-50"
-          >
-            {t('cancel')}
-          </button>
-          <button
-            onClick={handleSubmit}
-            disabled={isLoading}
-            className="flex-1 py-3 rounded-xl gradient-card-primary text-primary-foreground font-medium text-sm shadow-gradient hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center justify-center gap-2"
-          >
-            {isLoading ? (
-              <>
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                {t('saving')}
-              </>
-            ) : (
-              t('submit')
-            )}
-          </button>
-        </div>
-      </motion.div>
+            {/* Bonus Percentage */}
+            <div>
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 block">
+                {t('bonusPercentage')} <span className="text-red-500">*</span>
+              </label>
+              <div className="relative">
+                <Percent className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="100"
+                  className={`w-full pl-10 pr-4 py-3 rounded-lg border ${
+                    errors.bonus_percentage 
+                      ? 'border-red-300 focus:ring-red-200' 
+                      : 'border-gray-200 dark:border-gray-600 focus:ring-primary/30'
+                  } bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:border-primary outline-none transition-all`}
+                  value={form.bonus_percentage}
+                  onChange={e => setForm({ ...form, bonus_percentage: e.target.value })}
+                  disabled={isLoading}
+                  placeholder="0.00"
+                />
+              </div>
+              {errors.bonus_percentage ? (
+                <p className="text-xs text-red-500 mt-1">{errors.bonus_percentage}</p>
+              ) : (
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('bonusHint')}</p>
+              )}
+            </div>
+
+            {/* Form Actions */}
+            <div className="flex gap-3 pt-4">
+              <button
+                onClick={handleCancel}
+                disabled={isLoading}
+                className="flex-1 py-3 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 font-medium text-sm hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                <X className="w-4 h-4" />
+                {t('cancel')}
+              </button>
+              <button
+                onClick={handleSubmit}
+                disabled={isLoading}
+                className="flex-1 py-3 rounded-lg bg-gradient-to-r from-primary to-primary/70 text-white font-medium text-sm shadow-md hover:shadow-lg transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {isLoading ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    {t('saving')}
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4" />
+                    {editingReseller ? t('update') : t('submit')}
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </motion.div>
+      </div>
     </div>
   );
 };

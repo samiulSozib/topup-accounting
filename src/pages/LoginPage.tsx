@@ -3,13 +3,14 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { useState, FormEvent, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Wallet, Eye, EyeOff } from 'lucide-react';
+import { Wallet, Eye, EyeOff, Package, Sparkles } from 'lucide-react';
 import { loginBusinessOwner, selectAuthLoading, selectAuthError, clearError } from '../redux/slices/businessOwnerSlice';
 import { useAppDispatch, useAppSelector } from '@/redux/hook';
 import { errorAlert, successAlert } from '@/util/alert';
+import LanguageSwitcher from '@/components/LanguageSwitcher';
 
 const LoginPage = () => {
-  const { t } = useLanguage();
+  const { t, language, isRTL } = useLanguage(); // Get language and RTL state
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
   
@@ -63,33 +64,38 @@ const LoginPage = () => {
 
       if (loginBusinessOwner.fulfilled.match(result)) {
         successAlert(t('loginSuccess'));
-        // Navigate to dashboard or home page
         navigate('/');
       }
     } catch (error) {
-      // This will be caught by the rejected case in the slice
       console.error('Login error:', error);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 p-4 relative">
+      {/* Language Switcher - Properly positioned for both RTL and LTR */}
+      <div className={`absolute top-4 sm:top-6 ${isRTL ? 'left-4 sm:left-6' : 'right-4 sm:right-6'}`}>
+        <LanguageSwitcher />
+      </div>
+
       <motion.div 
         initial={{ opacity: 0, y: 24 }} 
         animate={{ opacity: 1, y: 0 }} 
         className="w-full max-w-sm space-y-6"
+        dir={isRTL ? 'rtl' : 'ltr'} // Set direction for the card
       >
         <div className="text-center">
-          <div className="w-14 h-14 rounded-2xl gradient-card-primary flex items-center justify-center shadow-gradient mx-auto mb-4">
-            <Wallet className="w-7 h-7 text-primary-foreground" />
+          <div className="w-14 h-14 rounded-2xl bg-gradient-to-r from-primary to-primary/70 flex items-center justify-center shadow-lg mx-auto mb-4">
+            <Wallet className="w-7 h-7 text-white" />
           </div>
-          <h1 className="text-2xl font-bold text-foreground">{t('welcomeBack')}</h1>
-          <p className="text-sm text-muted-foreground mt-1">{t('manageYourBusiness')}</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{t('welcomeBack')}</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{t('manageYourBusiness')}</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="bg-card rounded-2xl border p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-6 space-y-4">
+          
           <div>
-            <label className="text-sm font-medium text-foreground mb-1.5 block">
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 block">
               {t('phoneOrEmail')}
             </label>
             <input
@@ -97,13 +103,13 @@ const LoginPage = () => {
               value={phoneNumber}
               onChange={(e) => setPhoneNumber(e.target.value)}
               disabled={isLoading}
-              className="w-full px-4 py-3 rounded-xl border bg-secondary text-foreground text-sm focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               placeholder="01798778977"
             />
           </div>
 
           <div>
-            <label className="text-sm font-medium text-foreground mb-1.5 block">
+            <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5 block">
               {t('password')}
             </label>
             <div className="relative">
@@ -112,24 +118,31 @@ const LoginPage = () => {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 disabled={isLoading}
-                className="w-full px-4 py-3 pe-11 rounded-xl border bg-secondary text-foreground text-sm focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full px-4 py-3 pe-11 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 placeholder="••••••"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
                 disabled={isLoading}
-                className="absolute end-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                className="absolute inset-y-0 end-3 flex items-center text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors disabled:opacity-50"
               >
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
           </div>
 
-          <div className="text-end">
+          <div className="flex items-center justify-between">
+            <Link 
+              to="/subscription-packages" 
+              className="flex items-center gap-1.5 text-sm text-primary hover:text-primary/80 font-medium transition-colors"
+            >
+              <Package className="w-4 h-4" />
+              {t('viewPackages')}
+            </Link>
             <Link 
               to="/forgot-password" 
-              className="text-xs text-primary font-medium hover:underline"
+              className="text-xs text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
             >
               {t('forgotPasswordQ')}
             </Link>
@@ -138,7 +151,7 @@ const LoginPage = () => {
           <button
             type="submit"
             disabled={isLoading}
-            className="block w-full py-3 rounded-xl gradient-card-primary text-primary-foreground font-semibold text-center shadow-gradient hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+            className="block w-full py-3 rounded-xl bg-gradient-to-r from-primary to-primary/70 text-white font-semibold text-center shadow-md hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isLoading ? (
               <span className="flex items-center justify-center gap-2">
@@ -153,7 +166,6 @@ const LoginPage = () => {
             )}
           </button>
         </form>
-
       </motion.div>
     </div>
   );

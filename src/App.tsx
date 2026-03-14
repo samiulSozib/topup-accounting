@@ -24,6 +24,9 @@ import ForgotPasswordPage from "@/pages/ForgotPasswordPage";
 import NotFound from "@/pages/NotFound";
 import AuthGuard from "./components/authGuard";
 import PublicGuard from "./components/PublicGuard";
+import ViewResellerPage from "./pages/ViewResellerPage";
+import ViewSupplierPage from "./pages/ViewSupplierPage";
+import SubscriptionPackagesPage from "./pages/SubscriptionPackagePage";
 
 const queryClient = new QueryClient();
 
@@ -52,6 +55,8 @@ const App = () => (
                   <ForgotPasswordPage />
                 </PublicGuard>
               } />
+
+              <Route path="/subscription-packages" element={<PublicGuard><SubscriptionPackagesPage /></PublicGuard>}/>
               
               {/* Protected Routes - with AuthGuard */}
               <Route element={
@@ -60,16 +65,25 @@ const App = () => (
                 </AuthGuard>
               }>
                 <Route path="/" element={<HomePage />} />
-                <Route path="/suppliers" element={<SuppliersPage />} />
-                <Route path="/resellers" element={<ResellersPage />} />
-                <Route path="/add-supplier" element={<AddSupplierPage />} />
-                <Route path="/add-reseller" element={<AddResellerPage />} />
-                <Route path="/buy-topup" element={<BuyTopupPage />} />
-                <Route path="/sell-topup" element={<SellTopupPage />} />
                 <Route path="/transactions" element={<TransactionsPage />} />
+                <Route path="/add-supplier" element={<AddSupplierPage />} />
+                <Route path="/suppliers" element={<SuppliersPage />} />
+                <Route path="/buy-topup" element={<BuyTopupPage />} />
+                <Route path="/resellers" element={<ResellersPage />} />
+                
+                <Route path="/add-reseller" element={<AddResellerPage />} />
+                
+                <Route path="/sell-topup" element={<SellTopupPage />} />
+                <Route path="/resellers/:id" element={<ViewResellerPage />}/>
+                <Route path="/suppliers/:id" element={<ViewSupplierPage />}/>
+                
+                
+                
+                {/* 
+                
                 <Route path="/supplier-ledger" element={<SupplierLedgerPage />} />
-                <Route path="/reseller-ledger" element={<ResellerLedgerPage />} />
-                <Route path="/reports" element={<ReportsPage />} />
+                <Route path="/reseller-ledger" element={<ResellerLedgerPage />} />  */}
+                <Route path="/reports" element={<ReportsPage />} /> 
               </Route>
               
               {/* 404 Route */}

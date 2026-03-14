@@ -8,7 +8,7 @@ import {
   selectAllTransactions, 
   selectTransactionsLoading, 
   makeResellerCollection 
-} from '@/redux/slices/topUpTransactionSlice';
+} from '@/redux/slices/transactionSlice';
 import { ITopUpTransaction, ITransactionFilters, ITransactionResponse } from '@/type/topUpTransaction';
 import { 
   Loader2, ChevronDown, ChevronUp, Search, ArrowUpRight, ArrowDownLeft, X, DollarSign,

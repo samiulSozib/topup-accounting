@@ -1,331 +1,384 @@
-// redux/slices/resellerSlice.ts
+// store/slices/resellerSlice.ts
+
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
-import axios, { AxiosError } from 'axios';
-import { 
-  IReseller, 
-  IResellerCreate, 
-  IResellerUpdate, 
-  IResellerPercentageUpdate,
-  IResellerStatusUpdate,
-  IResellerResponse,
-  IResellerState 
-} from '../../type/reseller';
+import axios from 'axios';
+import {
+  Reseller,
+  ResellerResponse,
+  SingleResellerResponse,
+  ResellerStatisticsResponse,
+  CreateResellerRequest,
+  UpdateResellerRequest,
+  Pagination
+} from '../../type';
+import { ApiError } from '../../type/api';
 
-const BASE_URL = import.meta.env.VITE_BASE_URL || '';
+const API_URL = import.meta.env.VITE_BASE_URL || '';
 
-// Initial state
-const initialState: IResellerState = {
-  resellers: [],
-  selectedReseller: null,
-  isLoading: false,
-  error: null,
-  pagination: null,
-};
 
-interface ErrorResponse {
-  message?: string;
+interface ResellerState {
+  resellers: Reseller[];
+  selectedReseller: Reseller | null;
+  resellerStatistics: ResellerStatisticsResponse | null;
+  loading: boolean;
+  error: string | null;
+  pagination: Pagination | null;
 }
 
-// Helper to get auth token
-const getAuthHeaders = () => {
-  const token = localStorage.getItem('token');
-  return {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  };
+const initialState: ResellerState = {
+  resellers: [],
+  selectedReseller: null,
+  resellerStatistics: null,
+  loading: false,
+  error: null,
+  pagination: null
 };
 
-// ==================== Async Thunks ====================
+interface FetchResellersParams {
+  page?: number;
+  item_per_page?: number;
+  search?: string;
+}
 
-// Get all resellers with pagination and search
+interface FetchStatisticsParams {
+  id: number;
+  params?: {
+    page?: number;
+    limit?: number;
+    recent_count?: number;
+    show_all?: boolean;
+  };
+}
+
+interface UpdateResellerData {
+  id: number;
+  data: UpdateResellerRequest;
+}
+
+interface UpdatePercentageData {
+  id: number;
+  bonus_percentage: number;
+}
+
+interface DeleteResponse {
+  status: boolean;
+  message: string;
+}
+
+// Helper function to handle API errors
+const handleApiError = (error: unknown): string => {
+  const apiError = error as ApiError;
+  return apiError.response?.data?.message || apiError.message || 'An unexpected error occurred';
+};
+
+// Async Thunks
 export const fetchResellers = createAsyncThunk<
-  IResellerResponse,
-  { page?: number; item_per_page?: number; search?: string } | undefined,
+  ResellerResponse,
+  FetchResellersParams,
   { rejectValue: string }
 >(
-  'reseller/fetchResellers',
-  async (params, { rejectWithValue }) => {
+  'resellers/fetchResellers',
+  async ({ page = 1, item_per_page = 20, search = '' }, { rejectWithValue }) => {
     try {
-      const queryParams = new URLSearchParams();
-      if (params?.page) queryParams.append('page', params.page.toString());
-      if (params?.item_per_page) queryParams.append('item_per_page', params.item_per_page.toString());
-      if (params?.search) queryParams.append('search', params.search);
-
-      const url = `${BASE_URL}/resellers${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
-      const response = await axios.get<IResellerResponse>(url, getAuthHeaders());
+      const token = localStorage.getItem('token');
+      const response = await axios.get<ResellerResponse>(`${API_URL}/resellers`, {
+        params: { page, item_per_page, search },
+        headers: { Authorization: `Bearer ${token}` }
+      });
       return response.data;
     } catch (error) {
-      const axiosError = error as AxiosError<ErrorResponse>;
-      return rejectWithValue(axiosError.response?.data?.message || 'Failed to fetch resellers');
+      return rejectWithValue(handleApiError(error));
     }
   }
 );
 
-// Create new reseller
-export const createReseller = createAsyncThunk<
-  IResellerResponse,
-  IResellerCreate,
-  { rejectValue: string }
->(
-  'reseller/createReseller',
-  async (resellerData, { rejectWithValue }) => {
-    try {
-      const response = await axios.post<IResellerResponse>(
-        `${BASE_URL}/resellers`,
-        resellerData,
-        getAuthHeaders()
-      );
-      return response.data;
-    } catch (error) {
-      const axiosError = error as AxiosError<ErrorResponse>;
-      return rejectWithValue(axiosError.response?.data?.message || 'Failed to create reseller');
-    }
-  }
-);
-
-// Update reseller
-export const updateReseller = createAsyncThunk<
-  IResellerResponse,
-  { reseller_id: number; data: IResellerUpdate },
-  { rejectValue: string }
->(
-  'reseller/updateReseller',
-  async ({ reseller_id, data }, { rejectWithValue }) => {
-    try {
-      const response = await axios.put<IResellerResponse>(
-        `${BASE_URL}/resellers/${reseller_id}`,
-        data,
-        getAuthHeaders()
-      );
-      return response.data;
-    } catch (error) {
-      const axiosError = error as AxiosError<ErrorResponse>;
-      return rejectWithValue(axiosError.response?.data?.message || 'Failed to update reseller');
-    }
-  }
-);
-
-// Update reseller percentage only
-export const updateResellerPercentage = createAsyncThunk<
-  IResellerResponse,
-  { reseller_id: number; data: IResellerPercentageUpdate },
-  { rejectValue: string }
->(
-  'reseller/updateResellerPercentage',
-  async ({ reseller_id, data }, { rejectWithValue }) => {
-    try {
-      const response = await axios.patch<IResellerResponse>(
-        `${BASE_URL}/resellers/percentage/${reseller_id}`,
-        data,
-        getAuthHeaders()
-      );
-      return response.data;
-    } catch (error) {
-      const axiosError = error as AxiosError<ErrorResponse>;
-      return rejectWithValue(axiosError.response?.data?.message || 'Failed to update reseller percentage');
-    }
-  }
-);
-
-// Change reseller status
-export const changeResellerStatus = createAsyncThunk<
-  IResellerResponse,
-  { reseller_id: number; data: IResellerStatusUpdate },
-  { rejectValue: string }
->(
-  'reseller/changeResellerStatus',
-  async ({ reseller_id, data }, { rejectWithValue }) => {
-    try {
-      const response = await axios.patch<IResellerResponse>(
-        `${BASE_URL}/resellers/status/${reseller_id}`,
-        data,
-        getAuthHeaders()
-      );
-      return response.data;
-    } catch (error) {
-      const axiosError = error as AxiosError<ErrorResponse>;
-      return rejectWithValue(axiosError.response?.data?.message || 'Failed to change reseller status');
-    }
-  }
-);
-
-// Delete reseller
-export const deleteReseller = createAsyncThunk<
-  { reseller_id: number; message: string },
+export const fetchResellerById = createAsyncThunk<
+  SingleResellerResponse,
   number,
   { rejectValue: string }
 >(
-  'reseller/deleteReseller',
-  async (reseller_id, { rejectWithValue }) => {
+  'resellers/fetchResellerById',
+  async (id: number, { rejectWithValue }) => {
     try {
-      const response = await axios.delete<{ status: boolean; message: string }>(
-        `${BASE_URL}/resellers/${reseller_id}`,
-        getAuthHeaders()
-      );
-      return { reseller_id, message: response.data.message };
+      const token = localStorage.getItem('token');
+      const response = await axios.get<SingleResellerResponse>(`${API_URL}/resellers/${id}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      return response.data;
     } catch (error) {
-      const axiosError = error as AxiosError<ErrorResponse>;
-      return rejectWithValue(axiosError.response?.data?.message || 'Failed to delete reseller');
+      return rejectWithValue(handleApiError(error));
     }
   }
 );
 
-// ==================== Slice ====================
+export const fetchResellerStatistics = createAsyncThunk<
+  ResellerStatisticsResponse,
+  FetchStatisticsParams,
+  { rejectValue: string }
+>(
+  'resellers/fetchResellerStatistics',
+  async ({ id, params }, { rejectWithValue }) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.get<ResellerStatisticsResponse>(
+        `${API_URL}/topup/reseller/statistics/${id}`,
+        {
+          params,
+          headers: { Authorization: `Bearer ${token}` }
+        }
+      );
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(handleApiError(error));
+    }
+  }
+);
 
+export const createReseller = createAsyncThunk<
+  SingleResellerResponse,
+  CreateResellerRequest,
+  { rejectValue: string }
+>(
+  'resellers/createReseller',
+  async (resellerData: CreateResellerRequest, { rejectWithValue }) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.post<SingleResellerResponse>(`${API_URL}/resellers`, resellerData, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(handleApiError(error));
+    }
+  }
+);
+
+export const updateReseller = createAsyncThunk<
+  SingleResellerResponse,
+  UpdateResellerData,
+  { rejectValue: string }
+>(
+  'resellers/updateReseller',
+  async ({ id, data }: UpdateResellerData, { rejectWithValue }) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.put<SingleResellerResponse>(`${API_URL}/resellers/${id}`, data, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(handleApiError(error));
+    }
+  }
+);
+
+export const updateResellerPercentage = createAsyncThunk<
+  SingleResellerResponse,
+  UpdatePercentageData,
+  { rejectValue: string }
+>(
+  'resellers/updateResellerPercentage',
+  async ({ id, bonus_percentage }: UpdatePercentageData, { rejectWithValue }) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.patch<SingleResellerResponse>(
+        `${API_URL}/resellers/${id}/percentage`,
+        { bonus_percentage },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(handleApiError(error));
+    }
+  }
+);
+
+export const changeResellerStatus = createAsyncThunk<
+  SingleResellerResponse,
+  number,
+  { rejectValue: string }
+>(
+  'resellers/changeResellerStatus',
+  async (id: number, { rejectWithValue }) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.patch<SingleResellerResponse>(
+        `${API_URL}/resellers/${id}/status`,
+        {},
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(handleApiError(error));
+    }
+  }
+);
+
+export const deleteReseller = createAsyncThunk<
+  { id: number; message: string },
+  number,
+  { rejectValue: string }
+>(
+  'resellers/deleteReseller',
+  async (id: number, { rejectWithValue }) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.delete<DeleteResponse>(
+        `${API_URL}/resellers/${id}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      return { id, message: response.data.message };
+    } catch (error) {
+      return rejectWithValue(handleApiError(error));
+    }
+  }
+);
+
+// Slice
 const resellerSlice = createSlice({
-  name: 'reseller',
+  name: 'resellers',
   initialState,
   reducers: {
-    clearError: (state) => {
+    clearResellerError: (state) => {
       state.error = null;
     },
-    setSelectedReseller: (state, action: PayloadAction<IReseller | null>) => {
-      state.selectedReseller = action.payload;
+    clearSelectedReseller: (state) => {
+      state.selectedReseller = null;
     },
-    clearResellers: (state) => {
-      state.resellers = [];
-      state.pagination = null;
-    },
+    clearResellerStatistics: (state) => {
+      state.resellerStatistics = null;
+    }
   },
   extraReducers: (builder) => {
-    // Fetch Resellers
     builder
+      // Fetch Resellers
       .addCase(fetchResellers.pending, (state) => {
-        state.isLoading = true;
+        state.loading = true;
         state.error = null;
       })
-      .addCase(fetchResellers.fulfilled, (state, action: PayloadAction<IResellerResponse>) => {
-        state.isLoading = false;
-        state.resellers = action.payload.resellers || [];
-        state.pagination = action.payload.pagination || null;
-        state.error = null;
+      .addCase(fetchResellers.fulfilled, (state, action: PayloadAction<ResellerResponse>) => {
+        state.loading = false;
+        state.resellers = action.payload.resellers;
+        state.pagination = action.payload.pagination;
       })
-      .addCase(fetchResellers.rejected, (state, action) => {
-        state.isLoading = false;
+      .addCase(fetchResellers.rejected, (state, action: PayloadAction<string | undefined>) => {
+        state.loading = false;
         state.error = action.payload || 'Failed to fetch resellers';
       })
 
-    // Create Reseller
-    builder
+      // Fetch Reseller By Id
+      .addCase(fetchResellerById.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(fetchResellerById.fulfilled, (state, action: PayloadAction<SingleResellerResponse>) => {
+        state.loading = false;
+        state.selectedReseller = action.payload.reseller;
+      })
+      .addCase(fetchResellerById.rejected, (state, action: PayloadAction<string | undefined>) => {
+        state.loading = false;
+        state.error = action.payload || 'Failed to fetch reseller';
+      })
+
+      // Fetch Reseller Statistics
+      .addCase(fetchResellerStatistics.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(fetchResellerStatistics.fulfilled, (state, action: PayloadAction<ResellerStatisticsResponse>) => {
+        state.loading = false;
+        state.resellerStatistics = action.payload;
+      })
+      .addCase(fetchResellerStatistics.rejected, (state, action: PayloadAction<string | undefined>) => {
+        state.loading = false;
+        state.error = action.payload || 'Failed to fetch reseller statistics';
+      })
+
+      // Create Reseller
       .addCase(createReseller.pending, (state) => {
-        state.isLoading = true;
+        state.loading = true;
         state.error = null;
       })
-      .addCase(createReseller.fulfilled, (state, action: PayloadAction<IResellerResponse>) => {
-        state.isLoading = false;
-        if (action.payload.reseller) {
-          state.resellers = [action.payload.reseller, ...state.resellers];
-        }
-        state.error = null;
+      .addCase(createReseller.fulfilled, (state, action: PayloadAction<SingleResellerResponse>) => {
+        state.loading = false;
+        state.resellers.unshift(action.payload.reseller);
       })
-      .addCase(createReseller.rejected, (state, action) => {
-        state.isLoading = false;
+      .addCase(createReseller.rejected, (state, action: PayloadAction<string | undefined>) => {
+        state.loading = false;
         state.error = action.payload || 'Failed to create reseller';
       })
 
-    // Update Reseller
-    builder
+      // Update Reseller
       .addCase(updateReseller.pending, (state) => {
-        state.isLoading = true;
+        state.loading = true;
         state.error = null;
       })
-      .addCase(updateReseller.fulfilled, (state, action: PayloadAction<IResellerResponse>) => {
-        state.isLoading = false;
-        if (action.payload.reseller) {
-          const index = state.resellers.findIndex(r => r.id === action.payload.reseller!.id);
-          if (index !== -1) {
-            state.resellers[index] = action.payload.reseller;
-          }
-          if (state.selectedReseller?.id === action.payload.reseller.id) {
-            state.selectedReseller = action.payload.reseller;
-          }
+      .addCase(updateReseller.fulfilled, (state, action: PayloadAction<SingleResellerResponse>) => {
+        state.loading = false;
+        const index = state.resellers.findIndex(r => r.id === action.payload.reseller.id);
+        if (index !== -1) {
+          state.resellers[index] = action.payload.reseller;
         }
-        state.error = null;
+        if (state.selectedReseller?.id === action.payload.reseller.id) {
+          state.selectedReseller = action.payload.reseller;
+        }
       })
-      .addCase(updateReseller.rejected, (state, action) => {
-        state.isLoading = false;
+      .addCase(updateReseller.rejected, (state, action: PayloadAction<string | undefined>) => {
+        state.loading = false;
         state.error = action.payload || 'Failed to update reseller';
       })
 
-    // Update Reseller Percentage
-    builder
-      .addCase(updateResellerPercentage.pending, (state) => {
-        state.isLoading = true;
-        state.error = null;
-      })
-      .addCase(updateResellerPercentage.fulfilled, (state, action: PayloadAction<IResellerResponse>) => {
-        state.isLoading = false;
-        if (action.payload.reseller) {
-          const index = state.resellers.findIndex(r => r.id === action.payload.reseller!.id);
-          if (index !== -1) {
-            state.resellers[index] = action.payload.reseller;
-          }
-          if (state.selectedReseller?.id === action.payload.reseller.id) {
-            state.selectedReseller = action.payload.reseller;
-          }
+      // Update Reseller Percentage
+      .addCase(updateResellerPercentage.fulfilled, (state, action: PayloadAction<SingleResellerResponse>) => {
+        const index = state.resellers.findIndex(r => r.id === action.payload.reseller.id);
+        if (index !== -1) {
+          state.resellers[index] = action.payload.reseller;
         }
-        state.error = null;
+        if (state.selectedReseller?.id === action.payload.reseller.id) {
+          state.selectedReseller = action.payload.reseller;
+        }
       })
-      .addCase(updateResellerPercentage.rejected, (state, action) => {
-        state.isLoading = false;
+      .addCase(updateResellerPercentage.rejected, (state, action: PayloadAction<string | undefined>) => {
         state.error = action.payload || 'Failed to update reseller percentage';
       })
 
-    // Change Reseller Status
-    builder
-      .addCase(changeResellerStatus.pending, (state) => {
-        state.isLoading = true;
-        state.error = null;
-      })
-      .addCase(changeResellerStatus.fulfilled, (state, action: PayloadAction<IResellerResponse>) => {
-        state.isLoading = false;
-        if (action.payload.reseller) {
-          const index = state.resellers.findIndex(r => r.id === action.payload.reseller!.id);
-          if (index !== -1) {
-            state.resellers[index] = action.payload.reseller;
-          }
-          if (state.selectedReseller?.id === action.payload.reseller.id) {
-            state.selectedReseller = action.payload.reseller;
-          }
+      // Change Reseller Status
+      .addCase(changeResellerStatus.fulfilled, (state, action: PayloadAction<SingleResellerResponse>) => {
+        const index = state.resellers.findIndex(r => r.id === action.payload.reseller.id);
+        if (index !== -1) {
+          state.resellers[index] = action.payload.reseller;
         }
-        state.error = null;
+        if (state.selectedReseller?.id === action.payload.reseller.id) {
+          state.selectedReseller = action.payload.reseller;
+        }
       })
-      .addCase(changeResellerStatus.rejected, (state, action) => {
-        state.isLoading = false;
+      .addCase(changeResellerStatus.rejected, (state, action: PayloadAction<string | undefined>) => {
         state.error = action.payload || 'Failed to change reseller status';
       })
 
-    // Delete Reseller
-    builder
+      // Delete Reseller
       .addCase(deleteReseller.pending, (state) => {
-        state.isLoading = true;
+        state.loading = true;
         state.error = null;
       })
-      .addCase(deleteReseller.fulfilled, (state, action: PayloadAction<{ reseller_id: number; message: string }>) => {
-        state.isLoading = false;
-        state.resellers = state.resellers.filter(r => r.id !== action.payload.reseller_id);
-        if (state.selectedReseller?.id === action.payload.reseller_id) {
+      .addCase(deleteReseller.fulfilled, (state, action: PayloadAction<{ id: number; message: string }>) => {
+        state.loading = false;
+        state.resellers = state.resellers.filter(r => r.id !== action.payload.id);
+        if (state.selectedReseller?.id === action.payload.id) {
           state.selectedReseller = null;
         }
-        state.error = null;
       })
-      .addCase(deleteReseller.rejected, (state, action) => {
-        state.isLoading = false;
+      .addCase(deleteReseller.rejected, (state, action: PayloadAction<string | undefined>) => {
+        state.loading = false;
         state.error = action.payload || 'Failed to delete reseller';
       });
-  },
+  }
 });
 
-// ==================== Exports ====================
-
-export const { clearError, setSelectedReseller, clearResellers } = resellerSlice.actions;
-
-// Selectors - Fixed to match Supplier pattern (using state.reseller instead of RootState)
-export const selectAllResellers = (state: { reseller: IResellerState }) => state.reseller.resellers;
-export const selectSelectedReseller = (state: { reseller: IResellerState }) => state.reseller.selectedReseller;
-export const selectResellerLoading = (state: { reseller: IResellerState }) => state.reseller.isLoading;
-export const selectResellerError = (state: { reseller: IResellerState }) => state.reseller.error;
-export const selectResellerPagination = (state: { reseller: IResellerState }) => state.reseller.pagination;
+export const { 
+  clearResellerError, 
+  clearSelectedReseller, 
+  clearResellerStatistics 
+} = resellerSlice.actions;
 
 export default resellerSlice.reducer;

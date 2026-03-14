@@ -21,12 +21,12 @@ const navGroups = [
       { path: '/sell-topup', icon: CreditCard, labelKey: 'sellTopup' },
     ],
   },
-  {
-    items: [
-      { path: '/supplier-ledger', icon: BookOpen, labelKey: 'supplierLedger' },
-      { path: '/reseller-ledger', icon: Wallet, labelKey: 'resellerLedger' },
-    ],
-  },
+  // {
+  //   items: [
+  //     { path: '/supplier-ledger', icon: BookOpen, labelKey: 'supplierLedger' },
+  //     { path: '/reseller-ledger', icon: Wallet, labelKey: 'resellerLedger' },
+  //   ],
+  // },
   {
     items: [
       { path: '/reports', icon: BarChart3, labelKey: 'reports' },
