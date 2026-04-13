@@ -585,7 +585,7 @@ const HomePage = () => {
           
           <div className="flex items-center gap-2">
             {/* Period Selector */}
-            <div className="bg-white dark:bg-gray-800 rounded-xl p-1 shadow-sm border border-gray-200 dark:border-gray-700">
+            {/* <div className="bg-white dark:bg-gray-800 rounded-xl p-1 shadow-sm border border-gray-200 dark:border-gray-700">
               {(['today', 'week', 'month'] as const).map((period) => (
                 <button
                   key={period}
@@ -599,7 +599,7 @@ const HomePage = () => {
                   {t(period)}
                 </button>
               ))}
-            </div>
+            </div> */}
 
             <motion.button 
               whileTap={{ scale: 0.95 }}
@@ -713,13 +713,13 @@ const HomePage = () => {
                   <div key={i} className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
                     <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">{item.label}</p>
                     <p className="text-sm sm:text-base font-bold text-gray-900 dark:text-white">{item.value}</p>
-                    {item.trend && (
+                    {/* {item.trend && (
                       <p className={`text-xs mt-1 ${
                         item.trend.startsWith('+') ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
                       }`}>
                         {item.trend}
                       </p>
-                    )}
+                    )} */}
                     {item.subValue && (
                       <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{item.subValue}</p>
                     )}
