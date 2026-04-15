@@ -1,31 +1,52 @@
 // pages/ReportsPage.tsx
+
 import { useLanguage } from '@/contexts/LanguageContext';
-import { useState, useEffect, useMemo, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, 
-  ResponsiveContainer, LineChart, Line, AreaChart, Area,
-  ComposedChart,
-  Legend
-} from 'recharts';
-import { 
-  Calendar, Download, Filter, TrendingUp, TrendingDown,
-  DollarSign, Package, Users, Truck, CreditCard,
-  BarChart3, LineChart as LineChartIcon, Activity,
-  RefreshCw, ChevronDown, ChevronUp, Maximize2, Minimize2,
-  Printer, Award, Target, ArrowUpRight, ArrowDownLeft, 
-  Clock, AlertCircle, Loader2, Sparkles, Layers, 
-  FileBarChart, Gift
-} from 'lucide-react';
 import { useAppDispatch, useAppSelector } from '@/redux/hook';
-import { RootState } from '@/redux/store';
-import { 
-  fetchTransactions, 
-  fetchProfitStatistics
-} from '@/redux/slices/transactionSlice';
-import { fetchSuppliers } from '@/redux/slices/supplierSlice';
 import { fetchResellers } from '@/redux/slices/resellerSlice';
+import { fetchSuppliers } from '@/redux/slices/supplierSlice';
+import {
+  fetchProfitStatistics,
+  fetchTransactions
+} from '@/redux/slices/transactionSlice';
+import { RootState } from '@/redux/store';
 import { TopUpTransaction } from '@/type/topUpTransaction';
+import { AnimatePresence, motion } from 'framer-motion';
+import {
+  Activity,
+  BarChart3,
+  ChevronDown, ChevronUp,
+  DollarSign,
+  Download,
+  FileBarChart,
+  Filter,
+  Layers,
+  LineChart as LineChartIcon,
+  Loader2,
+  Maximize2, Minimize2,
+  Printer,
+  RefreshCw,
+  Sparkles,
+  Target,
+  TrendingDown,
+  TrendingUp,
+  Truck,
+  Users
+} from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ComposedChart,
+  Legend,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis, YAxis
+} from 'recharts';
 
 // Types
 interface MonthlyData {
@@ -108,6 +129,13 @@ const ReportsPage = () => {
   const [exportLoading, setExportLoading] = useState<boolean>(false);
   const [selectedMetrics, setSelectedMetrics] = useState<string[]>(['purchase', 'sales', 'profit']);
 
+  // Helper function to parse string values to numbers
+  const parseValue = (value): number => {
+    if (value === null || value === undefined) return 0;
+    if (typeof value === 'number') return value;
+    return parseFloat(value) || 0;
+  };
+
   // Generate year options (2020 to 2030)
   const yearOptions = useMemo(() => {
     const years = [];
@@ -147,7 +175,7 @@ const ReportsPage = () => {
 
   useEffect(() => {
     // Filter daily data for selected month and year
-    const filtered = dailyData.filter(day => 
+    const filtered = dailyData.filter(day =>
       day.year === selectedYear && day.month === selectedMonth
     );
     setFilteredDailyData(filtered);
@@ -159,27 +187,6 @@ const ReportsPage = () => {
     dispatch(fetchResellers({ page: 1, item_per_page: 100 }));
     dispatch(fetchProfitStatistics());
   }, [dispatch]);
-
-  const calculateReports = () => {
-    // Filter transactions based on selected period
-    const filteredTransactions = filterTransactionsByPeriod(transactions);
-    
-    // Calculate monthly data
-    const monthly = calculateMonthlyData(filteredTransactions);
-    setMonthlyData(monthly);
-
-    // Calculate daily data (all time for filtering)
-    const daily = calculateDailyData(transactions); // Use all transactions for daily data
-    setDailyData(daily);
-
-    // Calculate supplier performance
-    const supplierPerf = calculateSupplierPerformance(filteredTransactions);
-    setSupplierPerformance(supplierPerf);
-
-    // Calculate reseller performance
-    const resellerPerf = calculateResellerPerformance(filteredTransactions);
-    setResellerPerformance(resellerPerf);
-  };
 
   const filterTransactionsByPeriod = (txs: TopUpTransaction[]): TopUpTransaction[] => {
     const now = new Date();
@@ -215,9 +222,30 @@ const ReportsPage = () => {
     });
   };
 
+  const calculateReports = () => {
+    // Filter transactions based on selected period
+    const filteredTransactions = filterTransactionsByPeriod(transactions);
+
+    // Calculate monthly data
+    const monthly = calculateMonthlyData(filteredTransactions);
+    setMonthlyData(monthly);
+
+    // Calculate daily data (all time for filtering)
+    const daily = calculateDailyData(transactions); // Use all transactions for daily data
+    setDailyData(daily);
+
+    // Calculate supplier performance
+    const supplierPerf = calculateSupplierPerformance(filteredTransactions);
+    setSupplierPerformance(supplierPerf);
+
+    // Calculate reseller performance
+    const resellerPerf = calculateResellerPerformance(filteredTransactions);
+    setResellerPerformance(resellerPerf);
+  };
+
   const calculateMonthlyData = (txs: TopUpTransaction[]): MonthlyData[] => {
     const months: { [key: string]: MonthlyData } = {};
-    
+
     // Initialize all months for selected year
     for (let i = 0; i < 12; i++) {
       const date = new Date(selectedYear, i, 1);
@@ -240,16 +268,19 @@ const ReportsPage = () => {
     txs.forEach(tx => {
       const date = new Date(tx.transaction_date);
       const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-      
+
       if (months[monthKey]) {
+        const baseAmount = parseValue(tx.base_amount);
+        const bonusAmount = parseValue(tx.bonus_amount);
+
         if (tx.transaction_type === 'purchase') {
-          months[monthKey].purchase += tx.base_amount || 0;
+          months[monthKey].purchase += baseAmount;
           months[monthKey].purchaseCount++;
-          months[monthKey].bonusReceived += tx.bonus_amount || 0;
+          months[monthKey].bonusReceived += bonusAmount;
         } else if (tx.transaction_type === 'sale') {
-          months[monthKey].sales += tx.base_amount || 0;
+          months[monthKey].sales += baseAmount;
           months[monthKey].salesCount++;
-          months[monthKey].bonusGiven += tx.bonus_amount || 0;
+          months[monthKey].bonusGiven += bonusAmount;
         }
       }
     });
@@ -271,7 +302,7 @@ const ReportsPage = () => {
 
   const calculateDailyData = (txs: TopUpTransaction[]): DailyData[] => {
     const days: { [key: string]: DailyData } = {};
-    
+
     // Get all unique dates from transactions
     txs.forEach(tx => {
       const date = new Date(tx.transaction_date);
@@ -279,7 +310,7 @@ const ReportsPage = () => {
       const year = date.getFullYear();
       const month = date.getMonth() + 1;
       const day = date.getDate();
-      
+
       if (!days[dateKey]) {
         days[dateKey] = {
           date: dateKey,
@@ -289,24 +320,26 @@ const ReportsPage = () => {
           purchase: 0,
           sales: 0,
           profit: 0,
-          displayDate: date.toLocaleDateString('en-US', { 
-            month: 'short', 
+          displayDate: date.toLocaleDateString('en-US', {
+            month: 'short',
             day: 'numeric',
             year: 'numeric'
           })
         };
       }
-      
+
+      const baseAmount = parseValue(tx.base_amount);
+
       if (tx.transaction_type === 'purchase') {
-        days[dateKey].purchase += tx.base_amount || 0;
+        days[dateKey].purchase += baseAmount;
       } else if (tx.transaction_type === 'sale') {
-        days[dateKey].sales += tx.base_amount || 0;
+        days[dateKey].sales += baseAmount;
       }
       days[dateKey].profit = days[dateKey].sales - days[dateKey].purchase;
     });
 
     // Sort by date (newest first)
-    return Object.values(days).sort((a, b) => 
+    return Object.values(days).sort((a, b) =>
       new Date(b.date).getTime() - new Date(a.date).getTime()
     );
   };
@@ -316,6 +349,9 @@ const ReportsPage = () => {
 
     txs.forEach(tx => {
       if (tx.transaction_type === 'purchase' && tx.supplier_id) {
+        const baseAmount = parseValue(tx.base_amount);
+        const bonusAmount = parseValue(tx.bonus_amount);
+
         if (!supplierMap[tx.supplier_id]) {
           const supplier = suppliers.find(s => s.id === tx.supplier_id);
           supplierMap[tx.supplier_id] = {
@@ -328,8 +364,8 @@ const ReportsPage = () => {
             lastPurchase: tx.transaction_date
           };
         }
-        supplierMap[tx.supplier_id].totalPurchases += tx.base_amount || 0;
-        supplierMap[tx.supplier_id].totalBonus += tx.bonus_amount || 0;
+        supplierMap[tx.supplier_id].totalPurchases += baseAmount;
+        supplierMap[tx.supplier_id].totalBonus += bonusAmount;
         supplierMap[tx.supplier_id].transactionCount++;
         if (new Date(tx.transaction_date) > new Date(supplierMap[tx.supplier_id].lastPurchase)) {
           supplierMap[tx.supplier_id].lastPurchase = tx.transaction_date;
@@ -350,6 +386,9 @@ const ReportsPage = () => {
 
     txs.forEach(tx => {
       if (tx.transaction_type === 'sale' && tx.reseller_id) {
+        const baseAmount = parseValue(tx.base_amount);
+        const bonusAmount = parseValue(tx.bonus_amount);
+
         if (!resellerMap[tx.reseller_id]) {
           const reseller = resellers.find(r => r.id === tx.reseller_id);
           resellerMap[tx.reseller_id] = {
@@ -362,8 +401,8 @@ const ReportsPage = () => {
             lastSale: tx.transaction_date
           };
         }
-        resellerMap[tx.reseller_id].totalSales += tx.base_amount || 0;
-        resellerMap[tx.reseller_id].totalBonus += tx.bonus_amount || 0;
+        resellerMap[tx.reseller_id].totalSales += baseAmount;
+        resellerMap[tx.reseller_id].totalBonus += bonusAmount;
         resellerMap[tx.reseller_id].transactionCount++;
         if (new Date(tx.transaction_date) > new Date(resellerMap[tx.reseller_id].lastSale)) {
           resellerMap[tx.reseller_id].lastSale = tx.transaction_date;
@@ -416,17 +455,17 @@ const ReportsPage = () => {
       <ResponsiveContainer width="100%" height={isFullscreen ? 500 : 300}>
         <ChartComponent data={data}>
           <CartesianGrid strokeDasharray="3 3" stroke="hsl(210 15% 90%)" />
-          <XAxis 
-            dataKey="month" 
+          <XAxis
+            dataKey="month"
             tick={{ fontSize: 12, fill: 'hsl(220 10% 50%)' }}
             axisLine={{ stroke: 'hsl(220 10% 50%)' }}
           />
-          <YAxis 
+          <YAxis
             tick={{ fontSize: 12, fill: 'hsl(220 10% 50%)' }}
             axisLine={{ stroke: 'hsl(220 10% 50%)' }}
             tickFormatter={(value) => formatCompactNumber(value)}
           />
-          <Tooltip 
+          <Tooltip
             formatter={(value: number) => formatCurrency(value)}
             labelFormatter={(label) => `Month: ${label}`}
             contentStyle={{
@@ -437,29 +476,29 @@ const ReportsPage = () => {
             }}
           />
           <Legend />
-          
+
           {selectedChartType === 'bar' && (
             <>
               {selectedMetrics.includes('purchase') && (
-                <Bar 
-                  dataKey="purchase" 
-                  fill="#3b82f6" 
+                <Bar
+                  dataKey="purchase"
+                  fill="#3b82f6"
                   radius={[6, 6, 0, 0]}
                   name={t('purchases')}
                 />
               )}
               {selectedMetrics.includes('sales') && (
-                <Bar 
-                  dataKey="sales" 
-                  fill="#10b981" 
+                <Bar
+                  dataKey="sales"
+                  fill="#10b981"
                   radius={[6, 6, 0, 0]}
                   name={t('sales')}
                 />
               )}
               {selectedMetrics.includes('profit') && (
-                <Bar 
-                  dataKey="profit" 
-                  fill="#f59e0b" 
+                <Bar
+                  dataKey="profit"
+                  fill="#f59e0b"
                   radius={[6, 6, 0, 0]}
                   name={t('profit')}
                 />
@@ -470,30 +509,30 @@ const ReportsPage = () => {
           {selectedChartType === 'line' && (
             <>
               {selectedMetrics.includes('purchase') && (
-                <Line 
-                  type="monotone" 
-                  dataKey="purchase" 
-                  stroke="#3b82f6" 
+                <Line
+                  type="monotone"
+                  dataKey="purchase"
+                  stroke="#3b82f6"
                   strokeWidth={3}
                   dot={{ r: 4, fill: '#3b82f6' }}
                   name={t('purchases')}
                 />
               )}
               {selectedMetrics.includes('sales') && (
-                <Line 
-                  type="monotone" 
-                  dataKey="sales" 
-                  stroke="#10b981" 
+                <Line
+                  type="monotone"
+                  dataKey="sales"
+                  stroke="#10b981"
                   strokeWidth={3}
                   dot={{ r: 4, fill: '#10b981' }}
                   name={t('sales')}
                 />
               )}
               {selectedMetrics.includes('profit') && (
-                <Line 
-                  type="monotone" 
-                  dataKey="profit" 
-                  stroke="#f59e0b" 
+                <Line
+                  type="monotone"
+                  dataKey="profit"
+                  stroke="#f59e0b"
                   strokeWidth={3}
                   dot={{ r: 4, fill: '#f59e0b' }}
                   name={t('profit')}
@@ -505,33 +544,33 @@ const ReportsPage = () => {
           {selectedChartType === 'area' && (
             <>
               {selectedMetrics.includes('purchase') && (
-                <Area 
-                  type="monotone" 
-                  dataKey="purchase" 
-                  stroke="#3b82f6" 
-                  fill="#3b82f6" 
+                <Area
+                  type="monotone"
+                  dataKey="purchase"
+                  stroke="#3b82f6"
+                  fill="#3b82f6"
                   fillOpacity={0.2}
                   strokeWidth={2}
                   name={t('purchases')}
                 />
               )}
               {selectedMetrics.includes('sales') && (
-                <Area 
-                  type="monotone" 
-                  dataKey="sales" 
-                  stroke="#10b981" 
-                  fill="#10b981" 
+                <Area
+                  type="monotone"
+                  dataKey="sales"
+                  stroke="#10b981"
+                  fill="#10b981"
                   fillOpacity={0.2}
                   strokeWidth={2}
                   name={t('sales')}
                 />
               )}
               {selectedMetrics.includes('profit') && (
-                <Area 
-                  type="monotone" 
-                  dataKey="profit" 
-                  stroke="#f59e0b" 
-                  fill="#f59e0b" 
+                <Area
+                  type="monotone"
+                  dataKey="profit"
+                  stroke="#f59e0b"
+                  fill="#f59e0b"
                   fillOpacity={0.2}
                   strokeWidth={2}
                   name={t('profit')}
@@ -542,23 +581,23 @@ const ReportsPage = () => {
 
           {selectedChartType === 'composed' && (
             <>
-              <Bar 
-                dataKey="purchase" 
-                fill="#3b82f6" 
+              <Bar
+                dataKey="purchase"
+                fill="#3b82f6"
                 radius={[6, 6, 0, 0]}
                 name={t('purchases')}
               />
-              <Line 
-                type="monotone" 
-                dataKey="sales" 
-                stroke="#10b981" 
+              <Line
+                type="monotone"
+                dataKey="sales"
+                stroke="#10b981"
                 strokeWidth={3}
                 name={t('sales')}
               />
-              <Area 
-                type="monotone" 
-                dataKey="profit" 
-                fill="#f59e0b" 
+              <Area
+                type="monotone"
+                dataKey="profit"
+                fill="#f59e0b"
                 stroke="#f59e0b"
                 fillOpacity={0.2}
                 name={t('profit')}
@@ -575,7 +614,7 @@ const ReportsPage = () => {
     setTimeout(() => {
       const csvContent = [
         ['Month', 'Purchases', 'Sales', 'Profit', 'Purchase Count', 'Sales Count', 'Bonus Received', 'Bonus Given'].join(','),
-        ...monthlyData.map(d => 
+        ...monthlyData.map(d =>
           [d.monthFull, d.purchase, d.sales, d.profit, d.purchaseCount, d.salesCount, d.bonusReceived, d.bonusGiven].join(',')
         )
       ].join('\n');
@@ -599,12 +638,36 @@ const ReportsPage = () => {
   };
 
   const toggleMetric = (metric: string) => {
-    setSelectedMetrics(prev => 
-      prev.includes(metric) 
+    setSelectedMetrics(prev =>
+      prev.includes(metric)
         ? prev.filter(m => m !== metric)
         : [...prev, metric]
     );
   };
+
+  // Calculate summary values from profitStats or monthlyData
+  const totalRevenue = useMemo(() => {
+    if (profitStats?.profit_analysis?.total?.revenue) {
+      return parseValue(profitStats.profit_analysis.total.revenue);
+    }
+    return monthlyData.reduce((sum, d) => sum + d.sales, 0);
+  }, [profitStats, monthlyData]);
+
+  const totalCost = useMemo(() => {
+    if (profitStats?.profit_analysis?.total?.cost) {
+      return parseValue(profitStats.profit_analysis.total.cost);
+    }
+    return monthlyData.reduce((sum, d) => sum + d.purchase, 0);
+  }, [profitStats, monthlyData]);
+
+  const totalProfit = useMemo(() => {
+    if (profitStats?.profit_analysis?.total?.profit) {
+      return parseValue(profitStats.profit_analysis.total.profit);
+    }
+    return monthlyData.reduce((sum, d) => sum + d.profit, 0);
+  }, [profitStats, monthlyData]);
+
+  const totalTransactionsCount = transactions.length;
 
   if (isLoading && transactions.length === 0) {
     return (
@@ -624,7 +687,7 @@ const ReportsPage = () => {
     <div className={`min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 ${isFullscreen ? 'fixed inset-0 z-50 overflow-auto' : ''}`}>
       <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
         {/* Header */}
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           className="flex flex-col sm:flex-row sm:items-center justify-between gap-4"
@@ -827,33 +890,33 @@ const ReportsPage = () => {
         {/* Summary Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
-            { 
-              label: t('totalRevenue'), 
-              value: profitStats?.profit_analysis?.total?.revenue || monthlyData.reduce((sum, d) => sum + d.sales, 0),
+            {
+              label: t('totalRevenue'),
+              value: totalRevenue,
               icon: DollarSign,
               color: 'from-blue-500 to-blue-600',
               bgLight: 'bg-blue-50 dark:bg-blue-500/10',
               textLight: 'text-blue-600 dark:text-blue-400'
             },
-            { 
-              label: t('totalCost'), 
-              value: profitStats?.profit_analysis?.total?.cost || monthlyData.reduce((sum, d) => sum + d.purchase, 0),
+            {
+              label: t('totalCost'),
+              value: totalCost,
               icon: TrendingDown,
               color: 'from-orange-500 to-orange-600',
               bgLight: 'bg-orange-50 dark:bg-orange-500/10',
               textLight: 'text-orange-600 dark:text-orange-400'
             },
-            { 
-              label: t('totalProfit'), 
-              value: profitStats?.profit_analysis?.total?.profit || monthlyData.reduce((sum, d) => sum + d.profit, 0),
+            {
+              label: t('totalProfit'),
+              value: totalProfit,
               icon: TrendingUp,
               color: 'from-emerald-500 to-emerald-600',
               bgLight: 'bg-emerald-50 dark:bg-emerald-500/10',
               textLight: 'text-emerald-600 dark:text-emerald-400'
             },
-            { 
-              label: t('totalTransactions'), 
-              value: transactions.length,
+            {
+              label: t('totalTransactions'),
+              value: totalTransactionsCount,
               icon: Activity,
               color: 'from-purple-500 to-purple-600',
               bgLight: 'bg-purple-50 dark:bg-purple-500/10',
@@ -876,7 +939,7 @@ const ReportsPage = () => {
                   <div>
                     <p className="text-xs text-gray-500 dark:text-gray-400">{card.label}</p>
                     <p className="text-lg font-bold text-gray-900 dark:text-white">
-                      {formatCompactNumber(typeof card.value === 'number' ? card.value : 0)}
+                      {formatCompactNumber(card.value)}
                     </p>
                   </div>
                 </div>
@@ -968,6 +1031,11 @@ const ReportsPage = () => {
                   </div>
                 </motion.div>
               ))}
+              {supplierPerformance.length === 0 && (
+                <div className="px-5 py-8 text-center text-gray-500 dark:text-gray-400">
+                  {t('noSupplierData')}
+                </div>
+              )}
             </div>
           </motion.div>
 
@@ -1017,6 +1085,11 @@ const ReportsPage = () => {
                   </div>
                 </motion.div>
               ))}
+              {resellerPerformance.length === 0 && (
+                <div className="px-5 py-8 text-center text-gray-500 dark:text-gray-400">
+                  {t('noResellerData')}
+                </div>
+              )}
             </div>
           </motion.div>
         </div>
@@ -1035,7 +1108,7 @@ const ReportsPage = () => {
               </div>
               {t('dailyBreakdown')}
             </h3>
-            
+
             {/* Month/Year Selector */}
             <div className="flex items-center gap-2">
               <select
@@ -1106,7 +1179,7 @@ const ReportsPage = () => {
         </motion.div>
 
         {/* Statistics Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {/* <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
             { label: t('avgPurchase'), value: monthlyData.reduce((sum, d) => sum + d.avgPurchase, 0) / (monthlyData.length || 1), icon: Package, color: 'blue' },
             { label: t('avgSale'), value: monthlyData.reduce((sum, d) => sum + d.avgSale, 0) / (monthlyData.length || 1), icon: CreditCard, color: 'green' },
@@ -1120,7 +1193,7 @@ const ReportsPage = () => {
               purple: 'bg-purple-50 dark:bg-purple-500/10 text-purple-600 dark:text-purple-400',
               amber: 'bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400',
             };
-            
+
             return (
               <motion.div
                 key={stat.label}
@@ -1143,7 +1216,7 @@ const ReportsPage = () => {
               </motion.div>
             );
           })}
-        </div>
+        </div> */}
       </div>
     </div>
   );

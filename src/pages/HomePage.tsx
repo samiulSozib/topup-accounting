@@ -1,35 +1,49 @@
 // pages/HomePage.tsx
+
 import { useLanguage } from '@/contexts/LanguageContext';
-import { useState, useEffect, useMemo, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Wallet, TrendingUp, TrendingDown, DollarSign, 
-  ShoppingCart, CreditCard, Truck, Users, Plus, 
-  ArrowUpRight, ArrowDownLeft, Loader2, Calendar,
-  PieChart, Package, AlertCircle, CheckCircle,
-  Clock, BarChart3, ArrowRight, Sparkles, RefreshCw,
-  LayoutGrid, Layers, Target, Award, Zap, Gift,
-  TrendingUp as TrendingIcon, Menu, X, Eye, EyeOff,
-  ChevronRight, Star, Shield, Globe, Bell, Settings,
-  Moon, Sun, Download, Share2, Filter, Search,
-  Grid, List, Heart, Bookmark, Flag, Home,
-  LucideIcon
-} from 'lucide-react';
-import { Link } from 'react-router-dom';
 import { useAppDispatch, useAppSelector } from '@/redux/hook';
-import { 
-  fetchTransactions, 
-  fetchProfitStatistics,
-  fetchDashboardSummary,
-} from '@/redux/slices/transactionSlice';
-import { fetchSuppliers } from '@/redux/slices/supplierSlice';
 import { fetchResellers } from '@/redux/slices/resellerSlice';
+import { fetchSuppliers } from '@/redux/slices/supplierSlice';
+import {
+  fetchDashboardSummary,
+  fetchProfitStatistics,
+  fetchTransactions,
+} from '@/redux/slices/transactionSlice';
 import { RootState } from '@/redux/store';
+import { AnimatePresence, motion } from 'framer-motion';
+import {
+  AlertCircle,
+  ArrowDownLeft,
+  ArrowRight,
+  ArrowUpRight,
+  Award,
+  BarChart3,
+  Bell,
+  Calendar,
+  CheckCircle,
+  ChevronRight,
+  Clock,
+  CreditCard,
+  Home,
+  Layers,
+  LucideIcon,
+  Package,
+  Plus,
+  RefreshCw,
+  ShoppingCart,
+  TrendingDown,
+  TrendingUp as TrendingIcon,
+  TrendingUp,
+  Truck, Users,
+  Zap
+} from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 
 // Types
-import { TopUpTransaction } from '@/type/topUpTransaction';
-import { Supplier } from '@/type/supplier';
 import { Reseller } from '@/type/reseller';
+import { Supplier } from '@/type/supplier';
+import { TopUpTransaction } from '@/type/topUpTransaction';
 
 interface DashboardStats {
   totalStock: number;
@@ -68,20 +82,20 @@ interface QuickAction {
 const HomePage = () => {
   const { t } = useLanguage();
   const dispatch = useAppDispatch();
-  
+
   // Selectors with proper typing
   const transactions = useAppSelector((state: RootState) => state.transactions.transactions);
   const suppliers = useAppSelector((state: RootState) => state.suppliers.suppliers);
   const resellers = useAppSelector((state: RootState) => state.resellers.resellers);
   const profitStats = useAppSelector((state: RootState) => state.transactions.profitStatistics);
   const dashboardSummary = useAppSelector((state: RootState) => state.transactions.dashboardSummary);
-  
+
   const transactionsLoading = useAppSelector((state: RootState) => state.transactions.loading);
   const suppliersLoading = useAppSelector((state: RootState) => state.suppliers.loading);
   const resellersLoading = useAppSelector((state: RootState) => state.resellers.loading);
-  
+
   const isLoading = transactionsLoading || suppliersLoading || resellersLoading;
-  
+
   const [stats, setStats] = useState<DashboardStats>({
     totalStock: 0,
     totalStockValue: 0,
@@ -108,6 +122,13 @@ const HomePage = () => {
   const [showAllActions, setShowAllActions] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState<'today' | 'week' | 'month'>('today');
   const [refreshing, setRefreshing] = useState(false);
+
+  // Helper function to parse string values to numbers
+  const parseValue = (value): number => {
+    if (value === null || value === undefined) return 0;
+    if (typeof value === 'number') return value;
+    return parseFloat(value) || 0;
+  };
 
   // Date ranges
   const today = useMemo(() => {
@@ -159,132 +180,219 @@ const HomePage = () => {
 
   // Calculate dashboard stats
   useEffect(() => {
-    if (transactions.length > 0) {
-      calculateDashboardStats();
-    }
-  }, [transactions, profitStats]);
+    calculateDashboardStats();
+  }, [transactions, profitStats, dashboardSummary]);
 
   const calculateDashboardStats = () => {
-    let totalPurchasedTopup = 0;
-    let totalSoldTopup = 0;
-    let totalPurchaseAmount = 0;
-    let totalSaleAmount = 0;
-    let todayPurchaseAmount = 0;
-    let todaySaleAmount = 0;
-    let weeklyPurchaseAmount = 0;
-    let weeklySaleAmount = 0;
-    let monthlyPurchaseAmount = 0;
-    let monthlySaleAmount = 0;
-    let supplierDue = 0;
-    let resellerDue = 0;
-    let totalBonusReceived = 0;
-    let totalBonusGiven = 0;
-    let pendingSupplierPayments = 0;
-    let pendingResellerCollections = 0;
+    // Use dashboard summary data if available
+    if (dashboardSummary?.summary) {
+      const summary = dashboardSummary.summary;
 
-    transactions.forEach((tx: TopUpTransaction) => {
-      const txDate = new Date(tx.transaction_date);
-      
-      // Purchase transactions
-      if (tx.transaction_type === 'purchase') {
-        totalPurchasedTopup += tx.total_amount || 0;
-        totalPurchaseAmount += tx.base_amount || 0;
-        totalBonusReceived += tx.bonus_amount || 0;
-        
-        const dueForThisTx = (tx.base_amount || 0) - (tx.paid_amount || 0);
-        if (dueForThisTx > 0) {
-          supplierDue += dueForThisTx;
-          pendingSupplierPayments++;
-        }
-        
-        if (txDate >= today && txDate < tomorrow) {
-          todayPurchaseAmount += tx.base_amount || 0;
-        }
-        if (txDate >= weekStart) {
-          weeklyPurchaseAmount += tx.base_amount || 0;
-        }
-        if (txDate >= monthStart && txDate <= monthEnd) {
-          monthlyPurchaseAmount += tx.base_amount || 0;
-        }
-      }
-      
-      // Sale transactions
-      if (tx.transaction_type === 'sale') {
-        totalSoldTopup += tx.total_amount || 0;
-        totalSaleAmount += tx.base_amount || 0;
-        totalBonusGiven += tx.bonus_amount || 0;
-        
-        const dueForThisTx = (tx.base_amount || 0) - (tx.paid_amount || 0);
-        if (dueForThisTx > 0) {
-          resellerDue += dueForThisTx;
-          pendingResellerCollections++;
-        }
-        
-        if (txDate >= today && txDate < tomorrow) {
-          todaySaleAmount += tx.base_amount || 0;
-        }
-        if (txDate >= weekStart) {
-          weeklySaleAmount += tx.base_amount || 0;
-        }
-        if (txDate >= monthStart && txDate <= monthEnd) {
-          monthlySaleAmount += tx.base_amount || 0;
-        }
-      }
-      
-      // Supplier payments (reduce due)
-      if (tx.transaction_type === 'supplier_payment') {
-        supplierDue -= tx.paid_amount || 0;
-        if (supplierDue < 0) supplierDue = 0;
-      }
-      
-      // Reseller payments (reduce due)
-      if (tx.transaction_type === 'reseller_payment') {
-        resellerDue -= tx.paid_amount || 0;
-        if (resellerDue < 0) resellerDue = 0;
-      }
-    });
+      // Get values from dashboard summary
+      const totalPurchaseAmount = parseValue(summary.suppliers?.total_purchases);
+      const totalPaidToSuppliers = parseValue(summary.suppliers?.total_paid_to_suppliers);
+      const supplierDueAmount = parseValue(summary.suppliers?.total_supplier_due);
+      const totalStockAmount = parseValue(summary.suppliers?.total_stock);
+      const todayPurchaseAmount = parseValue(summary.today?.purchases);
+      const todaySaleAmount = parseValue(summary.today?.sales);
 
-    const avgPurchasePrice = totalPurchasedTopup > 0 
-      ? totalPurchaseAmount / totalPurchasedTopup 
-      : 0;
-    
-    const totalStock = Math.max(0, totalPurchasedTopup - totalSoldTopup);
-    const totalStockValue = totalStock * avgPurchasePrice;
+      // Use profit statistics data
+      const totalRevenue = parseValue(profitStats?.profit_analysis?.total?.revenue);
+      const totalCost = parseValue(profitStats?.profit_analysis?.total?.cost);
+      const totalProfit = parseValue(profitStats?.profit_analysis?.total?.profit);
+      const totalBonusReceived = parseValue(profitStats?.bonus_analysis?.total_bonus_received);
+      const totalBonusGiven = parseValue(profitStats?.bonus_analysis?.total_bonus_given);
+      const netBonusImpact = parseValue(profitStats?.bonus_analysis?.net_bonus_impact);
+      const totalSupplierDue = parseValue(profitStats?.due_analysis?.total_supplier_due);
+      const totalResellerDue = parseValue(profitStats?.due_analysis?.total_reseller_due);
 
-    const selectedPeriodAmount = selectedPeriod === 'today' ? todaySaleAmount :
-                                 selectedPeriod === 'week' ? weeklySaleAmount :
-                                 monthlySaleAmount;
-    
-    const selectedPeriodProfit = selectedPeriod === 'today' ? (todaySaleAmount - todayPurchaseAmount) :
-                                 selectedPeriod === 'week' ? (weeklySaleAmount - weeklyPurchaseAmount) :
-                                 (monthlySaleAmount - monthlyPurchaseAmount);
+      // Calculate additional metrics
+      const totalSaleAmount = totalRevenue;
+      const monthlyPurchaseAmount = totalPurchaseAmount;
+      const monthlySaleAmount = totalSaleAmount;
 
-    const averageProfitMargin = totalSaleAmount > 0 
-      ? ((totalSaleAmount - totalPurchaseAmount) / totalSaleAmount) * 100 
-      : 0;
+      // Count pending payments from transactions
+      const pendingSupplierPayments = transactions.filter((tx: TopUpTransaction) =>
+        tx.transaction_type === 'purchase' && parseValue(tx.due_amount) > 0
+      ).length;
 
-    setStats({
-      totalStock,
-      totalStockValue,
-      supplierDue: Math.max(0, supplierDue),
-      resellerDue: Math.max(0, resellerDue),
-      todayProfit: todaySaleAmount - todayPurchaseAmount,
-      monthlyProfit: monthlySaleAmount - monthlyPurchaseAmount,
-      totalPurchaseAmount,
-      totalSaleAmount,
-      todayPurchaseAmount,
-      todaySaleAmount,
-      monthlyPurchaseAmount,
-      monthlySaleAmount,
-      pendingSupplierPayments,
-      pendingResellerCollections,
-      averageProfitMargin,
-      totalBonusReceived,
-      totalBonusGiven,
-      netBonusImpact: totalBonusReceived - totalBonusGiven,
-      totalPurchasedTopup,
-      totalSoldTopup
-    });
+      const pendingResellerCollections = transactions.filter((tx: TopUpTransaction) =>
+        tx.transaction_type === 'sale' && parseValue(tx.due_amount) > 0
+      ).length;
+
+      // Calculate average profit margin
+      const averageProfitMargin = totalSaleAmount > 0
+        ? ((totalSaleAmount - totalPurchaseAmount) / totalSaleAmount) * 100
+        : 0;
+
+      // Calculate total purchased and sold topup from transactions
+      let totalPurchasedTopup = 0;
+      let totalSoldTopup = 0;
+
+      transactions.forEach((tx: TopUpTransaction) => {
+        if (tx.transaction_type === 'purchase') {
+          totalPurchasedTopup += parseValue(tx.total_amount);
+        }
+        if (tx.transaction_type === 'sale') {
+          totalSoldTopup += parseValue(tx.total_amount);
+        }
+      });
+
+      // Calculate total stock value
+      const avgPurchasePrice = totalPurchasedTopup > 0
+        ? totalPurchaseAmount / totalPurchasedTopup
+        : 0;
+      const totalStockValue = totalStockAmount * avgPurchasePrice;
+
+      setStats({
+        totalStock: totalStockAmount,
+        totalStockValue,
+        supplierDue: totalSupplierDue,
+        resellerDue: totalResellerDue,
+        todayProfit: parseValue(profitStats?.profit_analysis?.today?.profit) || 0,
+        monthlyProfit: totalProfit,
+        totalPurchaseAmount,
+        totalSaleAmount,
+        todayPurchaseAmount,
+        todaySaleAmount,
+        monthlyPurchaseAmount,
+        monthlySaleAmount,
+        pendingSupplierPayments,
+        pendingResellerCollections,
+        averageProfitMargin,
+        totalBonusReceived,
+        totalBonusGiven,
+        netBonusImpact,
+        totalPurchasedTopup,
+        totalSoldTopup
+      });
+    } else {
+      // Fallback: Calculate from transactions array
+      let totalPurchasedTopup = 0;
+      let totalSoldTopup = 0;
+      let totalPurchaseAmount = 0;
+      let totalSaleAmount = 0;
+      let todayPurchaseAmount = 0;
+      let todaySaleAmount = 0;
+      let weeklyPurchaseAmount = 0;
+      let weeklySaleAmount = 0;
+      let monthlyPurchaseAmount = 0;
+      let monthlySaleAmount = 0;
+      let supplierDue = 0;
+      let resellerDue = 0;
+      let totalBonusReceived = 0;
+      let totalBonusGiven = 0;
+      let pendingSupplierPayments = 0;
+      let pendingResellerCollections = 0;
+
+      transactions.forEach((tx: TopUpTransaction) => {
+        const txDate = new Date(tx.transaction_date);
+        const baseAmount = parseValue(tx.base_amount);
+        const totalAmount = parseValue(tx.total_amount);
+        const paidAmount = parseValue(tx.paid_amount);
+        const bonusAmount = parseValue(tx.bonus_amount);
+
+        // Purchase transactions
+        if (tx.transaction_type === 'purchase') {
+          totalPurchasedTopup += totalAmount;
+          totalPurchaseAmount += baseAmount;
+          totalBonusReceived += bonusAmount;
+
+          const dueForThisTx = baseAmount - paidAmount;
+          if (dueForThisTx > 0) {
+            supplierDue += dueForThisTx;
+            pendingSupplierPayments++;
+          }
+
+          if (txDate >= today && txDate < tomorrow) {
+            todayPurchaseAmount += baseAmount;
+          }
+          if (txDate >= weekStart) {
+            weeklyPurchaseAmount += baseAmount;
+          }
+          if (txDate >= monthStart && txDate <= monthEnd) {
+            monthlyPurchaseAmount += baseAmount;
+          }
+        }
+
+        // Sale transactions
+        if (tx.transaction_type === 'sale') {
+          totalSoldTopup += totalAmount;
+          totalSaleAmount += baseAmount;
+          totalBonusGiven += bonusAmount;
+
+          const dueForThisTx = baseAmount - paidAmount;
+          if (dueForThisTx > 0) {
+            resellerDue += dueForThisTx;
+            pendingResellerCollections++;
+          }
+
+          if (txDate >= today && txDate < tomorrow) {
+            todaySaleAmount += baseAmount;
+          }
+          if (txDate >= weekStart) {
+            weeklySaleAmount += baseAmount;
+          }
+          if (txDate >= monthStart && txDate <= monthEnd) {
+            monthlySaleAmount += baseAmount;
+          }
+        }
+
+        // Supplier payments (reduce due)
+        if (tx.transaction_type === 'supplier_payment') {
+          supplierDue -= paidAmount;
+          if (supplierDue < 0) supplierDue = 0;
+        }
+
+        // Reseller payments (reduce due)
+        if (tx.transaction_type === 'reseller_payment') {
+          resellerDue -= paidAmount;
+          if (resellerDue < 0) resellerDue = 0;
+        }
+      });
+
+      const avgPurchasePrice = totalPurchasedTopup > 0
+        ? totalPurchaseAmount / totalPurchasedTopup
+        : 0;
+
+      const totalStock = Math.max(0, totalPurchasedTopup - totalSoldTopup);
+      const totalStockValue = totalStock * avgPurchasePrice;
+
+      const selectedPeriodAmount = selectedPeriod === 'today' ? todaySaleAmount :
+                                   selectedPeriod === 'week' ? weeklySaleAmount :
+                                   monthlySaleAmount;
+
+      const selectedPeriodProfit = selectedPeriod === 'today' ? (todaySaleAmount - todayPurchaseAmount) :
+                                   selectedPeriod === 'week' ? (weeklySaleAmount - weeklyPurchaseAmount) :
+                                   (monthlySaleAmount - monthlyPurchaseAmount);
+
+      const averageProfitMargin = totalSaleAmount > 0
+        ? ((totalSaleAmount - totalPurchaseAmount) / totalSaleAmount) * 100
+        : 0;
+
+      setStats({
+        totalStock,
+        totalStockValue,
+        supplierDue: Math.max(0, supplierDue),
+        resellerDue: Math.max(0, resellerDue),
+        todayProfit: todaySaleAmount - todayPurchaseAmount,
+        monthlyProfit: monthlySaleAmount - monthlyPurchaseAmount,
+        totalPurchaseAmount,
+        totalSaleAmount,
+        todayPurchaseAmount,
+        todaySaleAmount,
+        monthlyPurchaseAmount,
+        monthlySaleAmount,
+        pendingSupplierPayments,
+        pendingResellerCollections,
+        averageProfitMargin,
+        totalBonusReceived,
+        totalBonusGiven,
+        netBonusImpact: totalBonusReceived - totalBonusGiven,
+        totalPurchasedTopup,
+        totalSoldTopup
+      });
+    }
   };
 
   const formatCurrency = (amount: number): string => {
@@ -316,7 +424,7 @@ const HomePage = () => {
 
   // Enhanced Summary Cards - Smaller size
   const summaryCards = [
-    { 
+    {
       label: t('totalStock'),
       value: formatCompactNumber(stats.totalStock),
       unit: '',
@@ -325,11 +433,11 @@ const HomePage = () => {
       gradient: 'from-blue-500 to-blue-600',
       bgLight: 'bg-blue-50 dark:bg-blue-500/10',
       textLight: 'text-blue-600 dark:text-blue-400',
-      trend: stats.totalStock > 0 ? ((stats.totalStock / (stats.totalPurchasedTopup || 1)) * 100).toFixed(1) + '%' : '0%',
+      trend: stats.totalPurchasedTopup > 0 ? ((stats.totalStock / stats.totalPurchasedTopup) * 100).toFixed(1) + '%' : '0%',
       trendLabel: t('of total'),
       chart: true
     },
-    { 
+    {
       label: t('supplierDue'),
       value: formatCurrency(stats.supplierDue),
       subValue: `${stats.pendingSupplierPayments} ${t('pending')}`,
@@ -340,7 +448,7 @@ const HomePage = () => {
       alert: stats.supplierDue > 100000,
       alertMessage: t('highDue')
     },
-    { 
+    {
       label: t('resellerDue'),
       value: formatCurrency(stats.resellerDue),
       subValue: `${stats.pendingResellerCollections} ${t('pending')}`,
@@ -351,7 +459,7 @@ const HomePage = () => {
       alert: stats.resellerDue > 100000,
       alertMessage: t('highDue')
     },
-    { 
+    {
       label: t('todayProfit'),
       value: formatCurrency(Math.abs(stats.todayProfit)),
       subValue: stats.todayProfit >= 0 ? t('profit') : t('loss'),
@@ -364,82 +472,82 @@ const HomePage = () => {
     },
   ];
 
-  // Enhanced Quick Actions with more visual appeal
+  // Enhanced Quick Actions
   const quickActions: QuickAction[] = [
-    { 
-      label: t('buyTopup'), 
-      icon: ShoppingCart, 
-      path: '/buy-topup', 
+    {
+      label: t('buyTopup'),
+      icon: ShoppingCart,
+      path: '/buy-topup',
       color: 'blue',
       gradient: 'from-blue-500 to-blue-600',
       bgLight: 'bg-blue-50 dark:bg-blue-500/10',
       textLight: 'text-blue-600 dark:text-blue-400',
       description: t('purchaseFromSupplier')
     },
-    { 
-      label: t('sellTopup'), 
-      icon: CreditCard, 
-      path: '/sell-topup', 
+    {
+      label: t('sellTopup'),
+      icon: CreditCard,
+      path: '/sell-topup',
       color: 'green',
       gradient: 'from-green-500 to-green-600',
       bgLight: 'bg-green-50 dark:bg-green-500/10',
       textLight: 'text-green-600 dark:text-green-400',
       description: t('sellToReseller')
     },
-    { 
-      label: t('supplierPayment'), 
-      icon: Truck, 
-      path: '/supplier-payment', 
+    {
+      label: t('supplierPayment'),
+      icon: Truck,
+      path: '/supplier-payment',
       color: 'orange',
       gradient: 'from-orange-500 to-orange-600',
       bgLight: 'bg-orange-50 dark:bg-orange-500/10',
       textLight: 'text-orange-600 dark:text-orange-400',
       description: t('payToSupplier')
     },
-    { 
-      label: t('resellerPayment'), 
-      icon: Users, 
-      path: '/reseller-payment', 
+    {
+      label: t('resellerPayment'),
+      icon: Users,
+      path: '/reseller-payment',
       color: 'purple',
       gradient: 'from-purple-500 to-purple-600',
       bgLight: 'bg-purple-50 dark:bg-purple-500/10',
       textLight: 'text-purple-600 dark:text-purple-400',
       description: t('collectFromReseller')
     },
-    { 
-      label: t('addSupplier'), 
-      icon: Plus, 
-      path: '/suppliers/add', 
+    {
+      label: t('addSupplier'),
+      icon: Plus,
+      path: '/suppliers/add',
       color: 'emerald',
       gradient: 'from-emerald-500 to-emerald-600',
       bgLight: 'bg-emerald-50 dark:bg-emerald-500/10',
       textLight: 'text-emerald-600 dark:text-emerald-400',
       description: t('registerNewSupplier')
     },
-    { 
-      label: t('addReseller'), 
-      icon: Plus, 
-      path: '/resellers/add', 
+    {
+      label: t('addReseller'),
+      icon: Plus,
+      path: '/resellers/add',
       color: 'amber',
       gradient: 'from-amber-500 to-amber-600',
       bgLight: 'bg-amber-50 dark:bg-amber-500/10',
       textLight: 'text-amber-600 dark:text-amber-400',
       description: t('registerNewReseller')
     },
-    { 
-      label: t('reports'), 
-      icon: BarChart3, 
-      path: '/reports', 
+    {
+      label: t('reports'),
+      icon: BarChart3,
+      path: '/reports',
       color: 'indigo',
       gradient: 'from-indigo-500 to-indigo-600',
       bgLight: 'bg-indigo-50 dark:bg-indigo-500/10',
       textLight: 'text-indigo-600 dark:text-indigo-400',
       description: t('viewDetailedReports')
     },
-    { 
-      label: t('analytics'), 
-      icon: TrendingIcon, 
-      path: '/analytics', 
+    {
+      label: t('analytics'),
+      icon: TrendingIcon,
+      path: '/analytics',
       color: 'pink',
       gradient: 'from-pink-500 to-pink-600',
       bgLight: 'bg-pink-50 dark:bg-pink-500/10',
@@ -468,15 +576,18 @@ const HomePage = () => {
   };
 
   const getTransactionAmount = (transaction: TopUpTransaction): { amount: number; type: 'in' | 'out' } => {
+    const baseAmount = parseValue(transaction.base_amount);
+    const paidAmount = parseValue(transaction.paid_amount);
+
     switch (transaction.transaction_type) {
       case 'purchase':
-        return { amount: transaction.base_amount || 0, type: 'out' };
+        return { amount: baseAmount, type: 'out' };
       case 'sale':
-        return { amount: transaction.base_amount || 0, type: 'in' };
+        return { amount: baseAmount, type: 'in' };
       case 'supplier_payment':
-        return { amount: transaction.paid_amount || 0, type: 'out' };
+        return { amount: paidAmount, type: 'out' };
       case 'reseller_payment':
-        return { amount: transaction.paid_amount || 0, type: 'in' };
+        return { amount: paidAmount, type: 'in' };
       default:
         return { amount: 0, type: 'in' };
     }
@@ -494,7 +605,7 @@ const HomePage = () => {
     if (diffMins < 60) return `${diffMins}${t('m')}`;
     if (diffHours < 24) return `${diffHours}${t('h')}`;
     if (diffDays < 7) return `${diffDays}${t('d')}`;
-    
+
     return date.toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric'
@@ -503,27 +614,27 @@ const HomePage = () => {
 
   const getTransactionStyle = (type: string) => {
     const styles: Record<string, { bg: string; text: string; icon: LucideIcon; gradient: string }> = {
-      purchase: { 
-        bg: 'bg-blue-50 dark:bg-blue-500/10', 
-        text: 'text-blue-600 dark:text-blue-400', 
+      purchase: {
+        bg: 'bg-blue-50 dark:bg-blue-500/10',
+        text: 'text-blue-600 dark:text-blue-400',
         icon: ArrowDownLeft,
         gradient: 'from-blue-500 to-blue-600'
       },
-      sale: { 
-        bg: 'bg-green-50 dark:bg-green-500/10', 
-        text: 'text-green-600 dark:text-green-400', 
+      sale: {
+        bg: 'bg-green-50 dark:bg-green-500/10',
+        text: 'text-green-600 dark:text-green-400',
         icon: ArrowUpRight,
         gradient: 'from-green-500 to-green-600'
       },
-      supplier_payment: { 
-        bg: 'bg-orange-50 dark:bg-orange-500/10', 
-        text: 'text-orange-600 dark:text-orange-400', 
+      supplier_payment: {
+        bg: 'bg-orange-50 dark:bg-orange-500/10',
+        text: 'text-orange-600 dark:text-orange-400',
         icon: ArrowUpRight,
         gradient: 'from-orange-500 to-orange-600'
       },
-      reseller_payment: { 
-        bg: 'bg-purple-50 dark:bg-purple-500/10', 
-        text: 'text-purple-600 dark:text-purple-400', 
+      reseller_payment: {
+        bg: 'bg-purple-50 dark:bg-purple-500/10',
+        text: 'text-purple-600 dark:text-purple-400',
         icon: ArrowDownLeft,
         gradient: 'from-purple-500 to-purple-600'
       },
@@ -558,7 +669,7 @@ const HomePage = () => {
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
       <div className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-6 space-y-4 sm:space-y-6">
         {/* Header */}
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           className="flex flex-col sm:flex-row sm:items-center justify-between gap-4"
@@ -573,35 +684,18 @@ const HomePage = () => {
               </h1>
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 flex items-center gap-2">
                 <Calendar className="w-4 h-4" />
-                {new Date().toLocaleDateString('en-US', { 
-                  weekday: 'long', 
-                  year: 'numeric', 
-                  month: 'long', 
-                  day: 'numeric' 
+                {new Date().toLocaleDateString('en-US', {
+                  weekday: 'long',
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric'
                 })}
               </p>
             </div>
           </div>
-          
-          <div className="flex items-center gap-2">
-            {/* Period Selector */}
-            {/* <div className="bg-white dark:bg-gray-800 rounded-xl p-1 shadow-sm border border-gray-200 dark:border-gray-700">
-              {(['today', 'week', 'month'] as const).map((period) => (
-                <button
-                  key={period}
-                  onClick={() => setSelectedPeriod(period)}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
-                    selectedPeriod === period
-                      ? 'bg-primary text-white shadow-md'
-                      : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
-                  }`}
-                >
-                  {t(period)}
-                </button>
-              ))}
-            </div> */}
 
-            <motion.button 
+          <div className="flex items-center gap-2">
+            <motion.button
               whileTap={{ scale: 0.95 }}
               onClick={loadDashboardData}
               className="p-2.5 bg-white dark:bg-gray-800 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors border border-gray-200 dark:border-gray-700 shadow-sm"
@@ -612,11 +706,11 @@ const HomePage = () => {
           </div>
         </motion.div>
 
-        {/* Summary Cards - Mobile: 2 columns, Desktop: 4 columns - Smaller size */}
+        {/* Summary Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
           {summaryCards.map((card, i) => {
             const Icon = card.icon;
-            
+
             return (
               <motion.div
                 key={card.label}
@@ -626,17 +720,15 @@ const HomePage = () => {
                 whileHover={{ y: -2 }}
                 className="group relative bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden"
               >
-                {/* Animated Background */}
                 <div className={`absolute inset-0 bg-gradient-to-br ${card.gradient} opacity-0 group-hover:opacity-5 transition-opacity duration-500`} />
-                
+
                 <div className="relative p-3 sm:p-4">
-                  {/* Header */}
                   <div className="flex items-start justify-between mb-2">
                     <div className={`p-2 rounded-lg ${card.bgLight} group-hover:scale-110 transition-transform duration-300`}>
                       <Icon className={`w-4 h-4 ${card.textLight}`} />
                     </div>
                     {card.alert && (
-                      <motion.span 
+                      <motion.span
                         initial={{ scale: 0 }}
                         animate={{ scale: 1 }}
                         className="flex items-center gap-1 text-[10px] bg-amber-100 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400 px-1.5 py-0.5 rounded-full"
@@ -647,7 +739,6 @@ const HomePage = () => {
                     )}
                   </div>
 
-                  {/* Value */}
                   <div className="space-y-0.5">
                     <div className="flex items-baseline gap-1 flex-wrap">
                       <p className="text-base sm:text-lg font-bold text-gray-900 dark:text-white">
@@ -662,7 +753,6 @@ const HomePage = () => {
                     </p>
                   </div>
 
-                  {/* Footer */}
                   <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-700/50 flex items-center justify-between">
                     <span className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400">
                       {card.label}
@@ -698,28 +788,18 @@ const HomePage = () => {
                   </div>
                   {t('performanceOverview')}
                 </h2>
-                <span className="text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded-full">
-                  {selectedPeriod === 'today' ? t('today') : selectedPeriod === 'week' ? t('thisWeek') : t('thisMonth')}
-                </span>
               </div>
 
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 {[
-                  { label: t('revenue'), value: formatCurrency(profitStats?.profit_analysis?.total?.revenue || stats.totalSaleAmount), trend: '+12.5%', color: 'emerald' },
-                  { label: t('cost'), value: formatCurrency(profitStats?.profit_analysis?.total?.cost || stats.totalPurchaseAmount), trend: '-8.2%', color: 'rose' },
+                  { label: t('revenue'), value: formatCurrency(stats.totalSaleAmount), color: 'emerald' },
+                  { label: t('cost'), value: formatCurrency(stats.totalPurchaseAmount), color: 'rose' },
                   { label: t('profitMargin'), value: `${stats.averageProfitMargin.toFixed(1)}%`, subValue: t('overall'), color: stats.averageProfitMargin >= 0 ? 'emerald' : 'rose' },
                   { label: t('netBonus'), value: `${stats.netBonusImpact >= 0 ? '+' : ''}${formatCompactNumber(Math.abs(stats.netBonusImpact))}`, subValue: t('units'), color: stats.netBonusImpact >= 0 ? 'emerald' : 'rose' },
                 ].map((item, i) => (
                   <div key={i} className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
                     <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">{item.label}</p>
                     <p className="text-sm sm:text-base font-bold text-gray-900 dark:text-white">{item.value}</p>
-                    {/* {item.trend && (
-                      <p className={`text-xs mt-1 ${
-                        item.trend.startsWith('+') ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
-                      }`}>
-                        {item.trend}
-                      </p>
-                    )} */}
                     {item.subValue && (
                       <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{item.subValue}</p>
                     )}
@@ -741,7 +821,7 @@ const HomePage = () => {
                       </span>
                     </div>
                     <div className="h-1.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
-                      <motion.div 
+                      <motion.div
                         initial={{ width: 0 }}
                         animate={{ width: `${item.value}%` }}
                         transition={{ duration: 1, delay: 0.5 + i * 0.2 }}
@@ -778,14 +858,14 @@ const HomePage = () => {
                   </p>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 flex items-center gap-1">
                     <Package className="w-3 h-3" />
-                    {transactions.filter((t: TopUpTransaction) => 
-                      t.transaction_type === 'purchase' && 
-                      new Date(t.transaction_date) >= today && 
+                    {transactions.filter((t: TopUpTransaction) =>
+                      t.transaction_type === 'purchase' &&
+                      new Date(t.transaction_date) >= today &&
                       new Date(t.transaction_date) < tomorrow
                     ).length} {t('transactions')}
                   </p>
                 </div>
-                
+
                 <div className="p-3 bg-gradient-to-br from-green-50 to-green-100 dark:from-green-500/10 dark:to-green-600/10 rounded-lg">
                   <div className="flex items-center gap-2 mb-2">
                     <CreditCard className="w-3.5 h-3.5 text-green-600 dark:text-green-400" />
@@ -796,9 +876,9 @@ const HomePage = () => {
                   </p>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 flex items-center gap-1">
                     <Users className="w-3 h-3" />
-                    {transactions.filter((t: TopUpTransaction) => 
-                      t.transaction_type === 'sale' && 
-                      new Date(t.transaction_date) >= today && 
+                    {transactions.filter((t: TopUpTransaction) =>
+                      t.transaction_type === 'sale' &&
+                      new Date(t.transaction_date) >= today &&
                       new Date(t.transaction_date) < tomorrow
                     ).length} {t('transactions')}
                   </p>
@@ -816,16 +896,10 @@ const HomePage = () => {
                   <div className="text-left sm:text-right">
                     <p className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">{t('profitMargin')}</p>
                     <p className={`text-sm sm:text-base font-bold ${getProfitColor(stats.todayProfit)}`}>
-                      {stats.todaySaleAmount > 0 
+                      {stats.todaySaleAmount > 0
                         ? ((stats.todayProfit / stats.todaySaleAmount) * 100).toFixed(1)
                         : 0}%
                     </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Target className="w-3.5 h-3.5 text-gray-400" />
-                    <span className="text-xs text-gray-500 dark:text-gray-400">
-                      {t('dailyTarget')}: {formatCurrency(stats.todaySaleAmount * 1.2)}
-                    </span>
                   </div>
                 </div>
               </div>
@@ -861,7 +935,7 @@ const HomePage = () => {
 
               <div className="p-4">
                 <AnimatePresence mode="wait">
-                  <motion.div 
+                  <motion.div
                     key={showAllActions ? 'all' : 'limited'}
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: 'auto' }}
@@ -871,7 +945,7 @@ const HomePage = () => {
                   >
                     {visibleActions.map((action, i) => {
                       const Icon = action.icon;
-                      
+
                       return (
                         <motion.div
                           key={action.label}
@@ -885,20 +959,16 @@ const HomePage = () => {
                             to={action.path}
                             className="group relative flex flex-col items-center gap-1.5 p-2 rounded-lg bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-700/50 dark:to-gray-800 hover:shadow-md transition-all duration-300 overflow-hidden"
                           >
-                            {/* Animated Background */}
                             <div className={`absolute inset-0 bg-gradient-to-br ${action.gradient} opacity-0 group-hover:opacity-10 transition-opacity duration-300`} />
-                            
-                            {/* Icon Container */}
+
                             <div className={`relative p-2 rounded-lg ${action.bgLight} group-hover:scale-110 transition-transform duration-300`}>
                               <Icon className={`w-3.5 h-3.5 ${action.textLight}`} />
                             </div>
-                            
-                            {/* Label */}
+
                             <span className="text-[10px] font-medium text-center text-gray-700 dark:text-gray-300 line-clamp-2">
                               {action.label}
                             </span>
-                            
-                            {/* Description - Show on hover */}
+
                             {action.description && (
                               <div className="absolute inset-x-0 bottom-0 p-1 bg-gradient-to-t from-gray-900/90 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
                                 <p className="text-[8px] text-white text-center">
@@ -950,8 +1020,8 @@ const HomePage = () => {
                         <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5 truncate">
                           {formatCurrency(stats.supplierDue)} {t('due')} · {stats.pendingSupplierPayments} {t('payments')}
                         </p>
-                        <Link 
-                          to="/supplier-payment" 
+                        <Link
+                          to="/supplier-payment"
                           className="inline-flex items-center gap-0.5 text-[10px] text-orange-600 dark:text-orange-400 mt-1 hover:underline"
                         >
                           {t('payNow')}
@@ -978,8 +1048,8 @@ const HomePage = () => {
                         <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5 truncate">
                           {formatCurrency(stats.resellerDue)} {t('due')} · {stats.pendingResellerCollections} {t('collections')}
                         </p>
-                        <Link 
-                          to="/reseller-payment" 
+                        <Link
+                          to="/reseller-payment"
                           className="inline-flex items-center gap-0.5 text-[10px] text-amber-600 dark:text-amber-400 mt-1 hover:underline"
                         >
                           {t('collectNow')}
@@ -1006,8 +1076,8 @@ const HomePage = () => {
                         <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5 truncate">
                           {stats.totalStock} {t('unitsRemaining')}
                         </p>
-                        <Link 
-                          to="/buy-topup" 
+                        <Link
+                          to="/buy-topup"
                           className="inline-flex items-center gap-0.5 text-[10px] text-blue-600 dark:text-blue-400 mt-1 hover:underline"
                         >
                           {t('restockNow')}
@@ -1061,7 +1131,6 @@ const HomePage = () => {
                   { label: t('activeSuppliers'), value: `${activeSuppliers}/${suppliers.length}`, icon: Truck, color: 'blue' },
                   { label: t('activeResellers'), value: `${activeResellers}/${resellers.length}`, icon: Users, color: 'green' },
                   { label: t('totalTransactions'), value: transactions.length, icon: Layers, color: 'purple' },
-                  { label: t('avgTransaction'), value: formatCurrency(stats.totalSaleAmount / (transactions.length || 1)), icon: DollarSign, color: 'amber' },
                 ].map((item, i) => {
                   const Icon = item.icon;
                   const colors = {
@@ -1070,7 +1139,7 @@ const HomePage = () => {
                     purple: 'bg-purple-50 dark:bg-purple-500/10 text-purple-600 dark:text-purple-400',
                     amber: 'bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400',
                   };
-                  
+
                   return (
                     <motion.div
                       key={item.label}
@@ -1092,8 +1161,8 @@ const HomePage = () => {
               </div>
 
               <div className="p-4 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700/50 dark:to-gray-800 border-t border-gray-200 dark:border-gray-700">
-                <Link 
-                  to="/reports" 
+                <Link
+                  to="/reports"
                   className="flex items-center justify-between group"
                 >
                   <span className="text-xs font-medium text-gray-700 dark:text-gray-300 group-hover:text-primary transition-colors">
@@ -1125,8 +1194,8 @@ const HomePage = () => {
               </div>
               {t('recentTransactions')}
             </h2>
-            <Link 
-              to="/transactions" 
+            <Link
+              to="/transactions"
               className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 font-medium group"
             >
               {t('viewAll')}
@@ -1150,7 +1219,7 @@ const HomePage = () => {
                 const Icon = style.icon;
                 const amount = getTransactionAmount(tx);
                 const partyName = getPartyName(tx);
-                
+
                 return (
                   <motion.div
                     key={tx.id}
