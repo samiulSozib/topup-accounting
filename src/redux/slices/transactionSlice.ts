@@ -10,8 +10,8 @@ import {
   SellTopupRequest,
   PaymentRequest,
   TransactionFilter,
-  ProfitStatisticsResponse,
   DashboardSummaryResponse,
+  ProfitReportResponse,
   SupplierStockResponse,
   Pagination
 } from '../../type';
@@ -22,8 +22,8 @@ const API_URL = import.meta.env.VITE_BASE_URL || '';
 interface TransactionState {
   transactions: TopUpTransaction[];
   selectedTransaction: TopUpTransaction | null;
-  profitStatistics: ProfitStatisticsResponse | null;
   dashboardSummary: DashboardSummaryResponse | null;
+  profitReport: ProfitReportResponse | null;
   supplierStock: SupplierStockResponse | null;
   loading: boolean;
   error: string | null;
@@ -38,8 +38,8 @@ interface TransactionState {
 const initialState: TransactionState = {
   transactions: [],
   selectedTransaction: null,
-  profitStatistics: null,
   dashboardSummary: null,
+  profitReport: null,
   supplierStock: null,
   loading: false,
   error: null,
@@ -51,18 +51,15 @@ interface FetchSupplierStockParams {
   supplier_id: number;
 }
 
-interface DeleteResponse {
-  status: boolean;
-  message: string;
-}
-
 // Helper function to handle API errors
 const handleApiError = (error: unknown): string => {
   const apiError = error as ApiError;
   return apiError.response?.data?.message || apiError.message || 'An unexpected error occurred';
 };
 
-// Async Thunks
+// ==================== Async Thunks ====================
+
+// Fetch all transactions with filters
 export const fetchTransactions = createAsyncThunk<
   TransactionResponse,
   TransactionFilter,
@@ -83,6 +80,28 @@ export const fetchTransactions = createAsyncThunk<
   }
 );
 
+// Fetch single transaction by ID
+export const fetchTransactionById = createAsyncThunk<
+  SingleTransactionResponse,
+  number,
+  { rejectValue: string }
+>(
+  'transactions/fetchTransactionById',
+  async (id: number, { rejectWithValue }) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.get<SingleTransactionResponse>(
+        `${API_URL}/topup/${id}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(handleApiError(error));
+    }
+  }
+);
+
+// Buy topup from supplier
 export const buyTopup = createAsyncThunk<
   SingleTransactionResponse,
   BuyTopupRequest,
@@ -104,6 +123,7 @@ export const buyTopup = createAsyncThunk<
   }
 );
 
+// Sell topup to reseller
 export const sellTopup = createAsyncThunk<
   SingleTransactionResponse,
   SellTopupRequest,
@@ -125,6 +145,7 @@ export const sellTopup = createAsyncThunk<
   }
 );
 
+// Make payment to supplier
 export const makeSupplierPayment = createAsyncThunk<
   SingleTransactionResponse,
   PaymentRequest,
@@ -146,6 +167,7 @@ export const makeSupplierPayment = createAsyncThunk<
   }
 );
 
+// Receive payment from reseller
 export const receiveResellerPayment = createAsyncThunk<
   SingleTransactionResponse,
   PaymentRequest,
@@ -167,26 +189,7 @@ export const receiveResellerPayment = createAsyncThunk<
   }
 );
 
-export const fetchProfitStatistics = createAsyncThunk<
-  ProfitStatisticsResponse,
-  void,
-  { rejectValue: string }
->(
-  'transactions/fetchProfitStatistics',
-  async (_, { rejectWithValue }) => {
-    try {
-      const token = localStorage.getItem('token');
-      const response = await axios.get<ProfitStatisticsResponse>(
-        `${API_URL}/topup/statistics/profit`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      return response.data;
-    } catch (error) {
-      return rejectWithValue(handleApiError(error));
-    }
-  }
-);
-
+// Fetch dashboard summary (main dashboard data)
 export const fetchDashboardSummary = createAsyncThunk<
   DashboardSummaryResponse,
   void,
@@ -207,6 +210,31 @@ export const fetchDashboardSummary = createAsyncThunk<
   }
 );
 
+// Fetch profit report
+export const fetchProfitReport = createAsyncThunk<
+  ProfitReportResponse,
+  { start_date?: string; end_date?: string } | void,
+  { rejectValue: string }
+>(
+  'transactions/fetchProfitReport',
+  async (params, { rejectWithValue }) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.get<ProfitReportResponse>(
+        `${API_URL}/topup/statistics/profit`,
+        {
+          params: params || {},
+          headers: { Authorization: `Bearer ${token}` }
+        }
+      );
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(handleApiError(error));
+    }
+  }
+);
+
+// Fetch supplier stock
 export const fetchSupplierStock = createAsyncThunk<
   SupplierStockResponse,
   FetchSupplierStockParams,
@@ -227,7 +255,8 @@ export const fetchSupplierStock = createAsyncThunk<
   }
 );
 
-// Slice
+// ==================== Slice ====================
+
 const transactionSlice = createSlice({
   name: 'transactions',
   initialState,
@@ -238,19 +267,22 @@ const transactionSlice = createSlice({
     clearSelectedTransaction: (state) => {
       state.selectedTransaction = null;
     },
-    clearProfitStatistics: (state) => {
-      state.profitStatistics = null;
-    },
     clearDashboardSummary: (state) => {
       state.dashboardSummary = null;
     },
+    clearProfitReport: (state) => {
+      state.profitReport = null;
+    },
     clearSupplierStock: (state) => {
       state.supplierStock = null;
+    },
+    clearAllData: (state) => {
+      return initialState;
     }
   },
   extraReducers: (builder) => {
     builder
-      // Fetch Transactions
+      // ==================== Fetch Transactions ====================
       .addCase(fetchTransactions.pending, (state) => {
         state.loading = true;
         state.error = null;
@@ -266,7 +298,21 @@ const transactionSlice = createSlice({
         state.error = action.payload || 'Failed to fetch transactions';
       })
 
-      // Buy Topup
+      // ==================== Fetch Transaction By ID ====================
+      .addCase(fetchTransactionById.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(fetchTransactionById.fulfilled, (state, action: PayloadAction<SingleTransactionResponse>) => {
+        state.loading = false;
+        state.selectedTransaction = action.payload.transaction || null;
+      })
+      .addCase(fetchTransactionById.rejected, (state, action: PayloadAction<string | undefined>) => {
+        state.loading = false;
+        state.error = action.payload || 'Failed to fetch transaction';
+      })
+
+      // ==================== Buy Topup ====================
       .addCase(buyTopup.pending, (state) => {
         state.loading = true;
         state.error = null;
@@ -282,7 +328,7 @@ const transactionSlice = createSlice({
         state.error = action.payload || 'Failed to buy topup';
       })
 
-      // Sell Topup
+      // ==================== Sell Topup ====================
       .addCase(sellTopup.pending, (state) => {
         state.loading = true;
         state.error = null;
@@ -298,7 +344,7 @@ const transactionSlice = createSlice({
         state.error = action.payload || 'Failed to sell topup';
       })
 
-      // Supplier Payment
+      // ==================== Make Supplier Payment ====================
       .addCase(makeSupplierPayment.pending, (state) => {
         state.loading = true;
         state.error = null;
@@ -314,7 +360,7 @@ const transactionSlice = createSlice({
         state.error = action.payload || 'Failed to make supplier payment';
       })
 
-      // Reseller Payment
+      // ==================== Receive Reseller Payment ====================
       .addCase(receiveResellerPayment.pending, (state) => {
         state.loading = true;
         state.error = null;
@@ -330,21 +376,7 @@ const transactionSlice = createSlice({
         state.error = action.payload || 'Failed to receive reseller payment';
       })
 
-      // Fetch Profit Statistics
-      .addCase(fetchProfitStatistics.pending, (state) => {
-        state.loading = true;
-        state.error = null;
-      })
-      .addCase(fetchProfitStatistics.fulfilled, (state, action: PayloadAction<ProfitStatisticsResponse>) => {
-        state.loading = false;
-        state.profitStatistics = action.payload;
-      })
-      .addCase(fetchProfitStatistics.rejected, (state, action: PayloadAction<string | undefined>) => {
-        state.loading = false;
-        state.error = action.payload || 'Failed to fetch profit statistics';
-      })
-
-      // Fetch Dashboard Summary
+      // ==================== Fetch Dashboard Summary ====================
       .addCase(fetchDashboardSummary.pending, (state) => {
         state.loading = true;
         state.error = null;
@@ -358,7 +390,21 @@ const transactionSlice = createSlice({
         state.error = action.payload || 'Failed to fetch dashboard summary';
       })
 
-      // Fetch Supplier Stock
+      // ==================== Fetch Profit Report ====================
+      .addCase(fetchProfitReport.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(fetchProfitReport.fulfilled, (state, action: PayloadAction<ProfitReportResponse>) => {
+        state.loading = false;
+        state.profitReport = action.payload;
+      })
+      .addCase(fetchProfitReport.rejected, (state, action: PayloadAction<string | undefined>) => {
+        state.loading = false;
+        state.error = action.payload || 'Failed to fetch profit report';
+      })
+
+      // ==================== Fetch Supplier Stock ====================
       .addCase(fetchSupplierStock.pending, (state) => {
         state.loading = true;
         state.error = null;
@@ -374,12 +420,60 @@ const transactionSlice = createSlice({
   }
 });
 
+// ==================== Selectors ====================
+
+export const selectAllTransactions = (state: { transactions: TransactionState }) =>
+  state.transactions.transactions;
+export const selectSelectedTransaction = (state: { transactions: TransactionState }) =>
+  state.transactions.selectedTransaction;
+export const selectTransactionsLoading = (state: { transactions: TransactionState }) =>
+  state.transactions.loading;
+export const selectTransactionsError = (state: { transactions: TransactionState }) =>
+  state.transactions.error;
+export const selectTransactionsPagination = (state: { transactions: TransactionState }) =>
+  state.transactions.pagination;
+export const selectTransactionsSummary = (state: { transactions: TransactionState }) =>
+  state.transactions.summary;
+export const selectDashboardSummary = (state: { transactions: TransactionState }) =>
+  state.transactions.dashboardSummary;
+export const selectProfitReport = (state: { transactions: TransactionState }) =>
+  state.transactions.profitReport;
+export const selectSupplierStock = (state: { transactions: TransactionState }) =>
+  state.transactions.supplierStock;
+
+// Helper selectors for dashboard data
+export const selectTotalProfit = (state: { transactions: TransactionState }) => {
+  const dashboard = state.transactions.dashboardSummary;
+  return dashboard?.summary?.topup_summary?.profit_analysis?.total_profit || "0.00";
+};
+
+export const selectTodayProfit = (state: { transactions: TransactionState }) => {
+  const dashboard = state.transactions.dashboardSummary;
+  return dashboard?.summary?.today?.profit?.total_profit || "0.00";
+};
+
+export const selectTotalRevenue = (state: { transactions: TransactionState }) => {
+  const dashboard = state.transactions.dashboardSummary;
+  return dashboard?.summary?.topup_summary?.profit_analysis?.total_revenue || "0.00";
+};
+
+export const selectCurrentStock = (state: { transactions: TransactionState }) => {
+  const dashboard = state.transactions.dashboardSummary;
+  return {
+    quantity: dashboard?.summary?.topup_summary?.current_stock_quantity || "0.00",
+    value: dashboard?.summary?.topup_summary?.current_stock_value || "0.00"
+  };
+};
+
+// Export actions
 export const {
   clearTransactionError,
   clearSelectedTransaction,
-  clearProfitStatistics,
   clearDashboardSummary,
-  clearSupplierStock
+  clearProfitReport,
+  clearSupplierStock,
+  clearAllData
 } = transactionSlice.actions;
 
+// Export reducer
 export default transactionSlice.reducer;

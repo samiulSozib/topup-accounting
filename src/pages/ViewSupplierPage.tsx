@@ -1,4 +1,5 @@
 // pages/ViewSupplierPage.tsx
+
 import { useLanguage } from '@/contexts/LanguageContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -28,17 +29,17 @@ import PaymentModal from '@/components/models/supplierPaymentModel';
 import BuyTopupModal from '@/components/models/buyTopUpModel';
 
 // Statistics Card Component - Compact
-const StatCard = ({ 
-  label, 
-  value, 
-  icon: Icon, 
+const StatCard = ({
+  label,
+  value,
+  icon: Icon,
   color = 'blue',
   trend,
   subValue
-}: { 
-  label: string; 
-  value: string | number; 
-  icon: LucideIcon; 
+}: {
+  label: string;
+  value: string | number;
+  icon: LucideIcon;
   color?: 'blue' | 'green' | 'amber' | 'rose' | 'purple' | 'emerald' | 'orange';
   trend?: { value: number; label: string; direction?: 'up' | 'down' };
   subValue?: string;
@@ -81,15 +82,17 @@ const StatCard = ({
 };
 
 // Transaction Row Component - Compact
-const TransactionRow = ({ 
-  transaction, 
-  type 
-}: { 
-  transaction: TopUpTransaction; 
+const TransactionRow = ({
+  transaction,
+  type,
+  currencyCode = 'AFG'
+}: {
+  transaction: TopUpTransaction;
   type: 'purchase' | 'payment';
+  currencyCode?: string;
 }) => {
   const { t } = useLanguage();
-  
+
   const getTransactionIcon = () => {
     switch (type) {
       case 'purchase': return <ArrowDownLeft className="w-3 h-3 sm:w-4 sm:h-4" />;
@@ -118,7 +121,7 @@ const TransactionRow = ({
     if (diffMins < 60) return `${diffMins}${t('m')}`;
     if (diffHours < 24) return `${diffHours}${t('h')}`;
     if (diffDays < 7) return `${diffDays}${t('d')}`;
-    
+
     return date.toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric'
@@ -126,12 +129,11 @@ const TransactionRow = ({
   };
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-BD', {
-      style: 'currency',
-      currency: 'BDT',
+    const formattedAmount = amount.toLocaleString('en-US', {
       minimumFractionDigits: 0,
-      maximumFractionDigits: 0
-    }).format(amount).replace('BDT', '$');
+      maximumFractionDigits: 2
+    });
+    return `${formattedAmount} ${currencyCode}`;
   };
 
   const getAmount = () => {
@@ -161,8 +163,8 @@ const TransactionRow = ({
       </div>
       <div className="text-right shrink-0 ml-2">
         <p className={`text-xs sm:text-sm font-semibold ${
-          type === 'payment' 
-            ? 'text-emerald-600 dark:text-emerald-400' 
+          type === 'payment'
+            ? 'text-emerald-600 dark:text-emerald-400'
             : 'text-rose-600 dark:text-rose-400'
         }`}>
           {type === 'payment' ? '+' : '-'}
@@ -192,6 +194,7 @@ const ViewSupplierPage = () => {
   const statistics = useAppSelector((state: RootState) => state.suppliers.supplierStatistics);
   const isLoading = useAppSelector((state: RootState) => state.suppliers.loading);
   const transactions = useAppSelector((state: RootState) => state.transactions.transactions);
+  const authState = useAppSelector((state: RootState) => state.businessOwner);
 
   const [activeTab, setActiveTab] = useState<'overview' | 'transactions' | 'analytics'>('overview');
   const [showAllTransactions, setShowAllTransactions] = useState(false);
@@ -199,6 +202,9 @@ const ViewSupplierPage = () => {
   const [selectedSupplierForPayment, setSelectedSupplierForPayment] = useState<Supplier | null>(null);
   const [selectedSupplierForBuy, setSelectedSupplierForBuy] = useState<Supplier | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+
+  // Get currency code from auth state
+  const currencyCode = authState?.businessOwner?.currency?.code || 'AFG';
 
   useEffect(() => {
     if (id) {
@@ -208,14 +214,14 @@ const ViewSupplierPage = () => {
 
   const loadSupplierData = async () => {
     if (!id) return;
-    
+
     setRefreshing(true);
     await Promise.all([
       dispatch(fetchSupplierById(parseInt(id))),
       dispatch(fetchSupplierStatistics({ id: parseInt(id) })),
-      dispatch(fetchTransactions({ 
+      dispatch(fetchTransactions({
         supplier_id: parseInt(id),
-        limit: 50 
+        limit: 50
       }))
     ]);
     setRefreshing(false);
@@ -264,19 +270,11 @@ const ViewSupplierPage = () => {
   };
 
   const formatCurrency = (amount: number): string => {
-    return new Intl.NumberFormat('en-BD', {
-      style: 'currency',
-      currency: 'BDT',
+    const formattedAmount = amount.toLocaleString('en-US', {
       minimumFractionDigits: 0,
-      maximumFractionDigits: 0
-    }).format(amount).replace('BDT', 'AFG');
-  };
-
-  const formatCompactNumber = (num: number): string => {
-    if (num >= 10000000) return (num / 10000000).toFixed(1) + 'Cr';
-    if (num >= 100000) return (num / 100000).toFixed(1) + 'L';
-    if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
-    return num.toString();
+      maximumFractionDigits: 2
+    });
+    return `${formattedAmount} ${currencyCode}`;
   };
 
   const formatDate = (dateString: string) => {
@@ -306,22 +304,25 @@ const ViewSupplierPage = () => {
     }
   };
 
-  const supplierTransactions = transactions.filter(tx => 
-    tx.supplier_id === supplier?.id || 
-    (tx.transaction_type === 'purchase' && tx.supplier_id === supplier?.id) ||
-    (tx.transaction_type === 'supplier_payment' && tx.supplier_id === supplier?.id)
+  // Filter transactions for this supplier
+  const supplierTransactions = transactions.filter(tx =>
+    tx.supplier_id === supplier?.id
   );
 
   const purchaseTransactions = supplierTransactions.filter(tx => tx.transaction_type === 'purchase');
   const paymentTransactions = supplierTransactions.filter(tx => tx.transaction_type === 'supplier_payment');
 
-  const totalPurchases = purchaseTransactions.reduce((sum, tx) => sum + (tx.base_amount || 0), 0);
-  const totalBonus = purchaseTransactions.reduce((sum, tx) => sum + (tx.bonus_amount || 0), 0);
-  const totalPaid = paymentTransactions.reduce((sum, tx) => sum + (tx.paid_amount || 0), 0);
-  const totalDue = (supplier?.total_due_amount || 0);
+  // Use supplier data from API directly
+  const totalPurchases = supplier?.total_buy_amount || 0;
+  const totalBonus = (supplier?.total_buy_topup_with_bonus || 0) - (supplier?.total_buy_amount || 0);
+  const totalPaid = supplier?.total_paid_amount || 0;
+  const totalDue = supplier?.total_due_amount || 0;
   const currentStock = supplier?.current_stock || 0;
 
   const paymentRatio = totalPurchases > 0 ? ((totalPaid / totalPurchases) * 100).toFixed(1) : '0';
+
+  // Calculate stock value (approximate)
+  const stockValue = currentStock * (1 + (supplier?.bonus_percentage || 0) / 100);
 
   if (isLoading && !supplier) {
     return (
@@ -420,32 +421,31 @@ const ViewSupplierPage = () => {
         <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
           <StatCard
             label={t('totalPurchases')}
-            value={formatCompactNumber(totalPurchases)}
+            value={formatCurrency(totalPurchases)}
             icon={TrendingUp}
             color="blue"
-            trend={{ value: 8.5, label: t('vsLastMonth') }}
             subValue={`${purchaseTransactions.length} ${t('transactions')}`}
           />
           <StatCard
             label={t('totalDue')}
-            value={formatCompactNumber(totalDue)}
+            value={formatCurrency(totalDue)}
             icon={AlertCircle}
             color="rose"
-            subValue={`${supplierTransactions.filter(tx => tx.transaction_type === 'purchase' && (tx.base_amount - (tx.paid_amount || 0) > 0)).length} ${t('pending')}`}
+            subValue={`${purchaseTransactions.filter(tx => (tx.base_amount - (tx.paid_amount || 0) > 0)).length} ${t('pending')}`}
           />
           <StatCard
             label={t('totalPaid')}
-            value={formatCompactNumber(totalPaid)}
+            value={formatCurrency(totalPaid)}
             icon={Wallet}
             color="emerald"
             subValue={`${paymentRatio}% ${t('paid')}`}
           />
           <StatCard
             label={t('currentStock')}
-            value={formatCompactNumber(currentStock)}
+            value={currentStock.toLocaleString()}
             icon={Package}
             color="purple"
-            subValue={`${t('worth')} ${formatCompactNumber(currentStock * (supplier.bonus_percentage / 100 + 1))}`}
+            subValue={`${t('worth')} ${formatCurrency(stockValue)}`}
           />
         </div>
 
@@ -556,16 +556,16 @@ const ViewSupplierPage = () => {
                   <div className="space-y-2 sm:space-y-4">
                     <div className="flex justify-between items-center pb-2 border-b border-gray-100 dark:border-gray-700">
                       <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">{t('totalPurchases')}</span>
-                      <span className="text-sm sm:text-base font-bold text-gray-900 dark:text-white">{formatCompactNumber(totalPurchases)}</span>
+                      <span className="text-sm sm:text-base font-bold text-gray-900 dark:text-white">{formatCurrency(totalPurchases)}</span>
                     </div>
                     <div className="flex justify-between items-center pb-2 border-b border-gray-100 dark:border-gray-700">
                       <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">{t('totalBonus')}</span>
-                      <span className="text-sm sm:text-base font-bold text-purple-600 dark:text-purple-400">{formatCompactNumber(totalBonus)}</span>
+                      <span className="text-sm sm:text-base font-bold text-purple-600 dark:text-purple-400">{formatCurrency(totalBonus)}</span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">{t('totalWithBonus')}</span>
                       <span className="text-sm sm:text-base font-bold text-green-600 dark:text-green-400">
-                        {formatCompactNumber(totalPurchases + totalBonus)}
+                        {formatCurrency(supplier.total_buy_topup_with_bonus || 0)}
                       </span>
                     </div>
                   </div>
@@ -576,17 +576,17 @@ const ViewSupplierPage = () => {
                   <div className="space-y-2 sm:space-y-4">
                     <div className="flex justify-between items-center pb-2 border-b border-gray-100 dark:border-gray-700">
                       <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">{t('totalPaid')}</span>
-                      <span className="text-sm sm:text-base font-bold text-emerald-600 dark:text-emerald-400">{formatCompactNumber(totalPaid)}</span>
+                      <span className="text-sm sm:text-base font-bold text-emerald-600 dark:text-emerald-400">{formatCurrency(totalPaid)}</span>
                     </div>
                     <div className="flex justify-between items-center pb-2 border-b border-gray-100 dark:border-gray-700">
                       <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">{t('totalDue')}</span>
-                      <span className="text-sm sm:text-base font-bold text-rose-600 dark:text-rose-400">{formatCompactNumber(totalDue)}</span>
+                      <span className="text-sm sm:text-base font-bold text-rose-600 dark:text-rose-400">{formatCurrency(totalDue)}</span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">{t('paymentRatio')}</span>
                       <div className="flex items-center gap-2">
                         <div className="w-16 sm:w-24 h-1.5 sm:h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                          <div 
+                          <div
                             className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 rounded-full"
                             style={{ width: `${paymentRatio}%` }}
                           />
@@ -604,24 +604,24 @@ const ViewSupplierPage = () => {
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
                   <div>
                     <p className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400">{t('currentStock')}</p>
-                    <p className="text-sm sm:text-base font-bold text-blue-600 dark:text-blue-400">{formatCompactNumber(currentStock)}</p>
+                    <p className="text-sm sm:text-base font-bold text-blue-600 dark:text-blue-400">{currentStock.toLocaleString()}</p>
                   </div>
                   <div>
                     <p className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400">{t('stockValue')}</p>
                     <p className="text-sm sm:text-base font-bold text-green-600 dark:text-green-400">
-                      {formatCompactNumber(currentStock * (supplier.bonus_percentage / 100 + 1))}
+                      {formatCurrency(stockValue)}
                     </p>
                   </div>
                   <div>
                     <p className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400">{t('avgPurchasePrice')}</p>
                     <p className="text-sm sm:text-base font-bold text-purple-600 dark:text-purple-400">
-                      {totalPurchases > 0 ? formatCompactNumber(totalPurchases / (purchaseTransactions.length || 1)) : '0'}
+                      {formatCurrency(totalPurchases / (purchaseTransactions.length || 1))}
                     </p>
                   </div>
                   <div>
                     <p className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400">{t('lastPurchase')}</p>
                     <p className="text-sm sm:text-base font-bold text-amber-600 dark:text-amber-400">
-                      {purchaseTransactions.length > 0 
+                      {purchaseTransactions.length > 0
                         ? formatDate(purchaseTransactions[0].transaction_date)
                         : t('none')}
                     </p>
@@ -710,6 +710,7 @@ const ViewSupplierPage = () => {
                       key={tx.id}
                       transaction={tx}
                       type={tx.transaction_type === 'purchase' ? 'purchase' : 'payment'}
+                      currencyCode={currencyCode}
                     />
                   ))
                 )}
@@ -734,25 +735,25 @@ const ViewSupplierPage = () => {
                         <div className="flex justify-between text-xs sm:text-sm">
                           <span className="text-gray-600 dark:text-gray-400">{t('totalPurchases')}</span>
                           <span className="font-medium text-gray-900 dark:text-white">
-                            {formatCompactNumber(statistics.summary?.total_purchase_amount || 0)}
+                            {formatCurrency(statistics.summary?.total_purchase_amount || 0)}
                           </span>
                         </div>
                         <div className="flex justify-between text-xs sm:text-sm">
                           <span className="text-gray-600 dark:text-gray-400">{t('totalPaid')}</span>
                           <span className="font-medium text-emerald-600 dark:text-emerald-400">
-                            {formatCompactNumber(statistics.summary?.total_paid || 0)}
+                            {formatCurrency(statistics.summary?.total_paid || 0)}
                           </span>
                         </div>
                         <div className="flex justify-between text-xs sm:text-sm">
                           <span className="text-gray-600 dark:text-gray-400">{t('totalDue')}</span>
                           <span className="font-medium text-rose-600 dark:text-rose-400">
-                            {formatCompactNumber(statistics.summary?.total_due || 0)}
+                            {formatCurrency(statistics.summary?.total_due || 0)}
                           </span>
                         </div>
                         <div className="flex justify-between text-xs sm:text-sm">
                           <span className="text-gray-600 dark:text-gray-400">{t('currentStock')}</span>
                           <span className="font-medium text-blue-600 dark:text-blue-400">
-                            {formatCompactNumber(statistics.summary?.current_stock || 0)}
+                            {statistics.summary?.current_stock?.toLocaleString() || 0}
                           </span>
                         </div>
                       </div>
@@ -771,10 +772,10 @@ const ViewSupplierPage = () => {
                             </div>
                             <div className="text-right shrink-0 ml-2">
                               <p className="text-xs sm:text-sm font-semibold text-rose-600 dark:text-rose-400">
-                                -{formatCompactNumber(tx.base_amount || 0)}
+                                -{formatCurrency(tx.base_amount || 0)}
                               </p>
                               <p className="text-[9px] sm:text-xs text-purple-600 dark:text-purple-400">
-                                +{formatCompactNumber(tx.bonus_amount || 0)} {t('bonus')}
+                                +{formatCurrency(tx.bonus_amount || 0)} {t('bonus')}
                               </p>
                             </div>
                           </div>
@@ -789,7 +790,7 @@ const ViewSupplierPage = () => {
                             </div>
                             <div className="text-right shrink-0 ml-2">
                               <p className="text-xs sm:text-sm font-semibold text-emerald-600 dark:text-emerald-400">
-                                +{formatCompactNumber(tx.paid_amount || 0)}
+                                +{formatCurrency(tx.paid_amount || 0)}
                               </p>
                             </div>
                           </div>
@@ -821,19 +822,19 @@ const ViewSupplierPage = () => {
                                     {formatDate(tx.transaction_date)}
                                   </td>
                                   <td className="text-right py-2 px-3 sm:py-3 sm:px-4 text-gray-900 dark:text-white text-[9px] sm:text-xs font-medium">
-                                    {formatCompactNumber(tx.base_amount || 0)}
-                                  </td>
+                                    {formatCurrency(tx.base_amount || 0)}
+                                   </td>
                                   <td className="text-right py-2 px-3 sm:py-3 sm:px-4 text-purple-600 dark:text-purple-400 text-[9px] sm:text-xs font-medium">
-                                    +{formatCompactNumber(tx.bonus_amount || 0)}
-                                  </td>
+                                    +{formatCurrency(tx.bonus_amount || 0)}
+                                   </td>
                                   <td className="text-right py-2 px-3 sm:py-3 sm:px-4 text-emerald-600 dark:text-emerald-400 text-[9px] sm:text-xs font-medium">
-                                    {formatCompactNumber(tx.paid_amount || 0)}
-                                  </td>
+                                    {formatCurrency(tx.paid_amount || 0)}
+                                   </td>
                                   <td className={`text-right py-2 px-3 sm:py-3 sm:px-4 text-[9px] sm:text-xs font-medium ${
                                     due > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'
                                   }`}>
-                                    {due > 0 ? formatCompactNumber(due) : '-'}
-                                  </td>
+                                    {due > 0 ? formatCurrency(due) : '-'}
+                                   </td>
                                 </tr>
                               );
                             })}

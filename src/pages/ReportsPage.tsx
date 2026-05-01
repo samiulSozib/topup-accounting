@@ -5,7 +5,8 @@ import { useAppDispatch, useAppSelector } from '@/redux/hook';
 import { fetchResellers } from '@/redux/slices/resellerSlice';
 import { fetchSuppliers } from '@/redux/slices/supplierSlice';
 import {
-  fetchProfitStatistics,
+  fetchDashboardSummary,
+  fetchProfitReport,
   fetchTransactions
 } from '@/redux/slices/transactionSlice';
 import { RootState } from '@/redux/store';
@@ -14,7 +15,8 @@ import { AnimatePresence, motion } from 'framer-motion';
 import {
   Activity,
   BarChart3,
-  ChevronDown, ChevronUp,
+  ChevronDown,
+  ChevronUp,
   DollarSign,
   Download,
   FileBarChart,
@@ -22,7 +24,8 @@ import {
   Layers,
   LineChart as LineChartIcon,
   Loader2,
-  Maximize2, Minimize2,
+  Maximize2,
+  Minimize2,
   Printer,
   RefreshCw,
   Sparkles,
@@ -45,22 +48,17 @@ import {
   LineChart,
   ResponsiveContainer,
   Tooltip,
-  XAxis, YAxis
+  XAxis,
+  YAxis
 } from 'recharts';
 
 // Types
-interface MonthlyData {
+interface ChartDataPoint {
   month: string;
   monthFull: string;
   purchase: number;
   sales: number;
   profit: number;
-  purchaseCount: number;
-  salesCount: number;
-  avgPurchase: number;
-  avgSale: number;
-  bonusReceived: number;
-  bonusGiven: number;
 }
 
 interface SupplierPerformance {
@@ -70,7 +68,6 @@ interface SupplierPerformance {
   totalBonus: number;
   transactionCount: number;
   avgPurchase: number;
-  lastPurchase: string;
 }
 
 interface ResellerPerformance {
@@ -80,18 +77,6 @@ interface ResellerPerformance {
   totalBonus: number;
   transactionCount: number;
   avgSale: number;
-  lastSale: string;
-}
-
-interface DailyData {
-  date: string;
-  day: number;
-  month: number;
-  year: number;
-  purchase: number;
-  sales: number;
-  profit: number;
-  displayDate: string;
 }
 
 type ChartType = 'bar' | 'line' | 'area' | 'composed';
@@ -105,38 +90,51 @@ const ReportsPage = () => {
   const transactions = useAppSelector((state: RootState) => state.transactions.transactions);
   const suppliers = useAppSelector((state: RootState) => state.suppliers.suppliers);
   const resellers = useAppSelector((state: RootState) => state.resellers.resellers);
-  const profitStats = useAppSelector((state: RootState) => state.transactions.profitStatistics);
+  const dashboardSummary = useAppSelector((state: RootState) => state.transactions.dashboardSummary);
+  const profitReport = useAppSelector((state: RootState) => state.transactions.profitReport);
+  const authState = useAppSelector((state: RootState) => state.businessOwner);
   const isLoading = useAppSelector((state: RootState) => state.transactions.loading);
 
   // State
-  const [monthlyData, setMonthlyData] = useState<MonthlyData[]>([]);
-  const [dailyData, setDailyData] = useState<DailyData[]>([]);
-  const [filteredDailyData, setFilteredDailyData] = useState<DailyData[]>([]);
+  const [chartData, setChartData] = useState<ChartDataPoint[]>([]);
   const [supplierPerformance, setSupplierPerformance] = useState<SupplierPerformance[]>([]);
   const [resellerPerformance, setResellerPerformance] = useState<ResellerPerformance[]>([]);
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>('month');
   const [selectedChartType, setSelectedChartType] = useState<ChartType>('bar');
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
-  const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth() + 1);
   const [showComparison, setShowComparison] = useState<boolean>(false);
-  const [comparisonYear, setComparisonYear] = useState<number>(new Date().getFullYear() - 1);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [showFilters, setShowFilters] = useState<boolean>(false);
-  const [dateRange, setDateRange] = useState<{ start: Date; end: Date }>({
-    start: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
-    end: new Date()
-  });
   const [exportLoading, setExportLoading] = useState<boolean>(false);
   const [selectedMetrics, setSelectedMetrics] = useState<string[]>(['purchase', 'sales', 'profit']);
 
+  // Get currency code from auth state
+  const currencyCode = authState?.businessOwner?.currency?.code || 'AFG';
+
   // Helper function to parse string values to numbers
-  const parseValue = (value): number => {
+  const parseValue = (value: string | number | undefined): number => {
     if (value === null || value === undefined) return 0;
     if (typeof value === 'number') return value;
     return parseFloat(value) || 0;
   };
 
-  // Generate year options (2020 to 2030)
+  // Format currency with currency code at the end
+  const formatCurrency = (amount: number): string => {
+    const formattedAmount = amount.toLocaleString('en-US', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2
+    });
+    return `${formattedAmount} ${currencyCode}`;
+  };
+
+  const formatCompactNumber = (num: number): string => {
+    if (num >= 10000000) return (num / 10000000).toFixed(1) + 'Cr';
+    if (num >= 100000) return (num / 100000).toFixed(1) + 'L';
+    if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+    return num.toString();
+  };
+
+  // Year options
   const yearOptions = useMemo(() => {
     const years = [];
     for (let i = 2020; i <= 2030; i++) {
@@ -145,106 +143,47 @@ const ReportsPage = () => {
     return years;
   }, []);
 
-  // Month options
-  const monthOptions = useMemo(() => {
-    return [
-      { value: 1, label: t('january') },
-      { value: 2, label: t('february') },
-      { value: 3, label: t('march') },
-      { value: 4, label: t('april') },
-      { value: 5, label: t('may') },
-      { value: 6, label: t('june') },
-      { value: 7, label: t('july') },
-      { value: 8, label: t('august') },
-      { value: 9, label: t('september') },
-      { value: 10, label: t('october') },
-      { value: 11, label: t('november') },
-      { value: 12, label: t('december') },
-    ];
-  }, [t]);
+  // Get data from dashboard summary
+  const summary = dashboardSummary?.summary;
+  const profitAnalysis = summary?.topup_summary?.profit_analysis;
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  // Get profit report data
+  const profitReportData = profitReport?.data;
 
-  useEffect(() => {
-    if (transactions.length > 0) {
-      calculateReports();
-    }
-  }, [transactions, selectedPeriod, selectedYear, selectedMonth, dateRange]);
+  // Extract values from API response
+  const totalRevenue = parseValue(profitAnalysis?.total_revenue);
+  const totalCost = parseValue(profitAnalysis?.total_cost_of_goods_sold);
+  const totalProfit = parseValue(profitAnalysis?.total_profit);
+  const profitMargin = profitAnalysis?.profit_margin_percentage || '0';
+  const totalTransactionsCount = transactions.length;
+  const totalBonusGiven = parseValue(summary?.topup_summary?.total_bonus_given_to_resellers);
 
-  useEffect(() => {
-    // Filter daily data for selected month and year
-    const filtered = dailyData.filter(day =>
-      day.year === selectedYear && day.month === selectedMonth
-    );
-    setFilteredDailyData(filtered);
-  }, [dailyData, selectedYear, selectedMonth]);
-
-  const loadData = useCallback(() => {
-    dispatch(fetchTransactions({ page: 1, limit: 1000 }));
-    dispatch(fetchSuppliers({ page: 1, item_per_page: 100 }));
-    dispatch(fetchResellers({ page: 1, item_per_page: 100 }));
-    dispatch(fetchProfitStatistics());
+  // Load dashboard data
+  const loadDashboardData = useCallback(async () => {
+    await Promise.all([
+      dispatch(fetchTransactions({ page: 1, limit: 1000 })),
+      dispatch(fetchSuppliers({ page: 1, item_per_page: 100 })),
+      dispatch(fetchResellers({ page: 1, item_per_page: 100 })),
+      dispatch(fetchDashboardSummary()),
+      dispatch(fetchProfitReport())
+    ]);
   }, [dispatch]);
 
-  const filterTransactionsByPeriod = (txs: TopUpTransaction[]): TopUpTransaction[] => {
-    const now = new Date();
-    let startDate: Date;
-    let endDate: Date = now;
+  useEffect(() => {
+    loadDashboardData();
+  }, [loadDashboardData]);
 
-    switch (selectedPeriod) {
-      case 'week':
-        startDate = new Date(now);
-        startDate.setDate(now.getDate() - 7);
-        break;
-      case 'month':
-        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-        break;
-      case 'quarter':
-        startDate = new Date(now.getFullYear(), now.getMonth() - 3, 1);
-        break;
-      case 'year':
-        startDate = new Date(selectedYear, 0, 1);
-        endDate = new Date(selectedYear, 11, 31, 23, 59, 59);
-        break;
-      case 'custom':
-        startDate = dateRange.start;
-        endDate = dateRange.end;
-        break;
-      default:
-        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+  // Calculate chart data and performance from transactions
+  useEffect(() => {
+    if (transactions.length > 0) {
+      calculateChartData();
+      calculateSupplierPerformance();
+      calculateResellerPerformance();
     }
+  }, [transactions, selectedYear]);
 
-    return txs.filter(tx => {
-      const txDate = new Date(tx.transaction_date);
-      return txDate >= startDate && txDate <= endDate;
-    });
-  };
-
-  const calculateReports = () => {
-    // Filter transactions based on selected period
-    const filteredTransactions = filterTransactionsByPeriod(transactions);
-
-    // Calculate monthly data
-    const monthly = calculateMonthlyData(filteredTransactions);
-    setMonthlyData(monthly);
-
-    // Calculate daily data (all time for filtering)
-    const daily = calculateDailyData(transactions); // Use all transactions for daily data
-    setDailyData(daily);
-
-    // Calculate supplier performance
-    const supplierPerf = calculateSupplierPerformance(filteredTransactions);
-    setSupplierPerformance(supplierPerf);
-
-    // Calculate reseller performance
-    const resellerPerf = calculateResellerPerformance(filteredTransactions);
-    setResellerPerformance(resellerPerf);
-  };
-
-  const calculateMonthlyData = (txs: TopUpTransaction[]): MonthlyData[] => {
-    const months: { [key: string]: MonthlyData } = {};
+  const calculateChartData = () => {
+    const months: { [key: string]: ChartDataPoint } = {};
 
     // Initialize all months for selected year
     for (let i = 0; i < 12; i++) {
@@ -255,99 +194,37 @@ const ReportsPage = () => {
         monthFull: date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
         purchase: 0,
         sales: 0,
-        profit: 0,
-        purchaseCount: 0,
-        salesCount: 0,
-        avgPurchase: 0,
-        avgSale: 0,
-        bonusReceived: 0,
-        bonusGiven: 0
+        profit: 0
       };
     }
 
-    txs.forEach(tx => {
+    transactions.forEach(tx => {
       const date = new Date(tx.transaction_date);
       const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 
       if (months[monthKey]) {
         const baseAmount = parseValue(tx.base_amount);
-        const bonusAmount = parseValue(tx.bonus_amount);
 
         if (tx.transaction_type === 'purchase') {
           months[monthKey].purchase += baseAmount;
-          months[monthKey].purchaseCount++;
-          months[monthKey].bonusReceived += bonusAmount;
         } else if (tx.transaction_type === 'sale') {
           months[monthKey].sales += baseAmount;
-          months[monthKey].salesCount++;
-          months[monthKey].bonusGiven += bonusAmount;
         }
+        months[monthKey].profit = months[monthKey].sales - months[monthKey].purchase;
       }
     });
 
-    // Calculate averages and profits
-    Object.values(months).forEach(month => {
-      month.profit = month.sales - month.purchase;
-      month.avgPurchase = month.purchaseCount > 0 ? month.purchase / month.purchaseCount : 0;
-      month.avgSale = month.salesCount > 0 ? month.sales / month.salesCount : 0;
-    });
-
-    // Sort by date
-    return Object.values(months).sort((a, b) => {
+    setChartData(Object.values(months).sort((a, b) => {
       const dateA = new Date(a.monthFull);
       const dateB = new Date(b.monthFull);
       return dateA.getTime() - dateB.getTime();
-    });
+    }));
   };
 
-  const calculateDailyData = (txs: TopUpTransaction[]): DailyData[] => {
-    const days: { [key: string]: DailyData } = {};
-
-    // Get all unique dates from transactions
-    txs.forEach(tx => {
-      const date = new Date(tx.transaction_date);
-      const dateKey = date.toISOString().split('T')[0];
-      const year = date.getFullYear();
-      const month = date.getMonth() + 1;
-      const day = date.getDate();
-
-      if (!days[dateKey]) {
-        days[dateKey] = {
-          date: dateKey,
-          day,
-          month,
-          year,
-          purchase: 0,
-          sales: 0,
-          profit: 0,
-          displayDate: date.toLocaleDateString('en-US', {
-            month: 'short',
-            day: 'numeric',
-            year: 'numeric'
-          })
-        };
-      }
-
-      const baseAmount = parseValue(tx.base_amount);
-
-      if (tx.transaction_type === 'purchase') {
-        days[dateKey].purchase += baseAmount;
-      } else if (tx.transaction_type === 'sale') {
-        days[dateKey].sales += baseAmount;
-      }
-      days[dateKey].profit = days[dateKey].sales - days[dateKey].purchase;
-    });
-
-    // Sort by date (newest first)
-    return Object.values(days).sort((a, b) =>
-      new Date(b.date).getTime() - new Date(a.date).getTime()
-    );
-  };
-
-  const calculateSupplierPerformance = (txs: TopUpTransaction[]): SupplierPerformance[] => {
+  const calculateSupplierPerformance = () => {
     const supplierMap: { [key: number]: SupplierPerformance } = {};
 
-    txs.forEach(tx => {
+    transactions.forEach(tx => {
       if (tx.transaction_type === 'purchase' && tx.supplier_id) {
         const baseAmount = parseValue(tx.base_amount);
         const bonusAmount = parseValue(tx.bonus_amount);
@@ -360,31 +237,29 @@ const ReportsPage = () => {
             totalPurchases: 0,
             totalBonus: 0,
             transactionCount: 0,
-            avgPurchase: 0,
-            lastPurchase: tx.transaction_date
+            avgPurchase: 0
           };
         }
         supplierMap[tx.supplier_id].totalPurchases += baseAmount;
         supplierMap[tx.supplier_id].totalBonus += bonusAmount;
         supplierMap[tx.supplier_id].transactionCount++;
-        if (new Date(tx.transaction_date) > new Date(supplierMap[tx.supplier_id].lastPurchase)) {
-          supplierMap[tx.supplier_id].lastPurchase = tx.transaction_date;
-        }
       }
     });
 
-    return Object.values(supplierMap)
+    const result = Object.values(supplierMap)
       .map(s => ({
         ...s,
         avgPurchase: s.transactionCount > 0 ? s.totalPurchases / s.transactionCount : 0
       }))
       .sort((a, b) => b.totalPurchases - a.totalPurchases);
+
+    setSupplierPerformance(result);
   };
 
-  const calculateResellerPerformance = (txs: TopUpTransaction[]): ResellerPerformance[] => {
+  const calculateResellerPerformance = () => {
     const resellerMap: { [key: number]: ResellerPerformance } = {};
 
-    txs.forEach(tx => {
+    transactions.forEach(tx => {
       if (tx.transaction_type === 'sale' && tx.reseller_id) {
         const baseAmount = parseValue(tx.base_amount);
         const bonusAmount = parseValue(tx.bonus_amount);
@@ -397,41 +272,23 @@ const ReportsPage = () => {
             totalSales: 0,
             totalBonus: 0,
             transactionCount: 0,
-            avgSale: 0,
-            lastSale: tx.transaction_date
+            avgSale: 0
           };
         }
         resellerMap[tx.reseller_id].totalSales += baseAmount;
         resellerMap[tx.reseller_id].totalBonus += bonusAmount;
         resellerMap[tx.reseller_id].transactionCount++;
-        if (new Date(tx.transaction_date) > new Date(resellerMap[tx.reseller_id].lastSale)) {
-          resellerMap[tx.reseller_id].lastSale = tx.transaction_date;
-        }
       }
     });
 
-    return Object.values(resellerMap)
+    const result = Object.values(resellerMap)
       .map(r => ({
         ...r,
         avgSale: r.transactionCount > 0 ? r.totalSales / r.transactionCount : 0
       }))
       .sort((a, b) => b.totalSales - a.totalSales);
-  };
 
-  const formatCurrency = (amount: number): string => {
-    return new Intl.NumberFormat('en-BD', {
-      style: 'currency',
-      currency: 'BDT',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
-    }).format(amount).replace('BDT', 'AFG');
-  };
-
-  const formatCompactNumber = (num: number): string => {
-    if (num >= 10000000) return (num / 10000000).toFixed(1) + 'Cr';
-    if (num >= 100000) return (num / 100000).toFixed(1) + 'L';
-    if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
-    return num.toString();
+    setResellerPerformance(result);
   };
 
   const getChartComponent = () => {
@@ -449,7 +306,7 @@ const ReportsPage = () => {
 
   const renderChart = () => {
     const ChartComponent = getChartComponent();
-    const data = monthlyData;
+    const data = chartData;
 
     return (
       <ResponsiveContainer width="100%" height={isFullscreen ? 500 : 300}>
@@ -613,9 +470,9 @@ const ReportsPage = () => {
     setExportLoading(true);
     setTimeout(() => {
       const csvContent = [
-        ['Month', 'Purchases', 'Sales', 'Profit', 'Purchase Count', 'Sales Count', 'Bonus Received', 'Bonus Given'].join(','),
-        ...monthlyData.map(d =>
-          [d.monthFull, d.purchase, d.sales, d.profit, d.purchaseCount, d.salesCount, d.bonusReceived, d.bonusGiven].join(',')
+        ['Month', 'Purchases', 'Sales', 'Profit'].join(','),
+        ...chartData.map(d =>
+          [d.monthFull, d.purchase, d.sales, d.profit].join(',')
         )
       ].join('\n');
 
@@ -644,30 +501,6 @@ const ReportsPage = () => {
         : [...prev, metric]
     );
   };
-
-  // Calculate summary values from profitStats or monthlyData
-  const totalRevenue = useMemo(() => {
-    if (profitStats?.profit_analysis?.total?.revenue) {
-      return parseValue(profitStats.profit_analysis.total.revenue);
-    }
-    return monthlyData.reduce((sum, d) => sum + d.sales, 0);
-  }, [profitStats, monthlyData]);
-
-  const totalCost = useMemo(() => {
-    if (profitStats?.profit_analysis?.total?.cost) {
-      return parseValue(profitStats.profit_analysis.total.cost);
-    }
-    return monthlyData.reduce((sum, d) => sum + d.purchase, 0);
-  }, [profitStats, monthlyData]);
-
-  const totalProfit = useMemo(() => {
-    if (profitStats?.profit_analysis?.total?.profit) {
-      return parseValue(profitStats.profit_analysis.total.profit);
-    }
-    return monthlyData.reduce((sum, d) => sum + d.profit, 0);
-  }, [profitStats, monthlyData]);
-
-  const totalTransactionsCount = transactions.length;
 
   if (isLoading && transactions.length === 0) {
     return (
@@ -699,7 +532,7 @@ const ReportsPage = () => {
             <div>
               <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{t('reports')}</h1>
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                {t('businessAnalytics')} · {monthlyData.length} {t('months')}
+                {t('businessAnalytics')} · {chartData.length} {t('months')}
               </p>
             </div>
           </div>
@@ -713,7 +546,7 @@ const ReportsPage = () => {
               <Filter className="w-5 h-5 text-gray-600 dark:text-gray-400" />
             </button>
             <button
-              onClick={loadData}
+              onClick={loadDashboardData}
               className="p-2.5 bg-white dark:bg-gray-800 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors border border-gray-200 dark:border-gray-700 shadow-sm"
               title={t('refresh')}
             >
@@ -763,24 +596,6 @@ const ReportsPage = () => {
             >
               <div className="p-5">
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                  {/* Period Selector */}
-                  <div>
-                    <label className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2 block">
-                      {t('period')}
-                    </label>
-                    <select
-                      value={selectedPeriod}
-                      onChange={(e) => setSelectedPeriod(e.target.value as PeriodType)}
-                      className="w-full p-2.5 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-sm text-gray-900 dark:text-white"
-                    >
-                      <option value="week">{t('lastWeek')}</option>
-                      <option value="month">{t('thisMonth')}</option>
-                      <option value="quarter">{t('lastQuarter')}</option>
-                      <option value="year">{t('year')}</option>
-                      <option value="custom">{t('custom')}</option>
-                    </select>
-                  </div>
-
                   {/* Chart Type */}
                   <div>
                     <label className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2 block">
@@ -834,53 +649,32 @@ const ReportsPage = () => {
                   </div>
 
                   {/* Year Selection */}
-                  {selectedPeriod === 'year' && (
-                    <div>
-                      <label className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2 block">
-                        {t('year')}
-                      </label>
-                      <select
-                        value={selectedYear}
-                        onChange={(e) => setSelectedYear(Number(e.target.value))}
-                        className="w-full p-2.5 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-sm text-gray-900 dark:text-white"
-                      >
-                        {yearOptions.map(year => (
-                          <option key={year} value={year}>{year}</option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-                </div>
+                  <div>
+                    <label className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2 block">
+                      {t('year')}
+                    </label>
+                    <select
+                      value={selectedYear}
+                      onChange={(e) => setSelectedYear(Number(e.target.value))}
+                      className="w-full p-2.5 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-sm text-gray-900 dark:text-white"
+                    >
+                      {yearOptions.map(year => (
+                        <option key={year} value={year}>{year}</option>
+                      ))}
+                    </select>
+                  </div>
 
-                {/* Comparison Toggle */}
-                <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-                  <button
-                    onClick={() => setShowComparison(!showComparison)}
-                    className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
-                  >
-                    <Target className="w-4 h-4" />
-                    {t('compareWithPreviousYear')}
-                    {showComparison ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                  </button>
-
-                  {showComparison && (
-                    <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div>
-                        <label className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2 block">
-                          {t('comparisonYear')}
-                        </label>
-                        <select
-                          value={comparisonYear}
-                          onChange={(e) => setComparisonYear(Number(e.target.value))}
-                          className="w-full p-2.5 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-sm text-gray-900 dark:text-white"
-                        >
-                          {yearOptions.map(year => (
-                            <option key={year} value={year}>{year}</option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-                  )}
+                  {/* Comparison Toggle */}
+                  <div className="flex items-end">
+                    <button
+                      onClick={() => setShowComparison(!showComparison)}
+                      className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
+                    >
+                      <Target className="w-4 h-4" />
+                      {t('compareWithPreviousYear')}
+                      {showComparison ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                    </button>
+                  </div>
                 </div>
               </div>
             </motion.div>
@@ -947,6 +741,34 @@ const ReportsPage = () => {
             );
           })}
         </div>
+
+        {/* Profit Margin Card */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15 }}
+          className="bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-500/10 dark:to-purple-500/10 rounded-2xl border border-indigo-200 dark:border-indigo-800 p-4"
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-indigo-100 dark:bg-indigo-500/20 rounded-xl">
+                <Target className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+              </div>
+              <div>
+                <p className="text-xs text-gray-500 dark:text-gray-400">{t('profitMargin')}</p>
+                <p className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">
+                  {profitMargin}%
+                </p>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className="text-xs text-gray-500 dark:text-gray-400">{t('totalBonusGiven')}</p>
+              <p className="text-lg font-semibold text-gray-900 dark:text-white">
+                {formatCurrency(totalBonusGiven)}
+              </p>
+            </div>
+          </div>
+        </motion.div>
 
         {/* Main Chart */}
         <motion.div
@@ -1093,130 +915,6 @@ const ReportsPage = () => {
             </div>
           </motion.div>
         </div>
-
-        {/* Daily Breakdown with Month/Year Selector */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.5 }}
-          className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-5"
-        >
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
-            <h3 className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-              <div className="p-1.5 bg-purple-50 dark:bg-purple-500/10 rounded-lg">
-                <Activity className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-              </div>
-              {t('dailyBreakdown')}
-            </h3>
-
-            {/* Month/Year Selector */}
-            <div className="flex items-center gap-2">
-              <select
-                value={selectedMonth}
-                onChange={(e) => setSelectedMonth(Number(e.target.value))}
-                className="p-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-sm text-gray-900 dark:text-white"
-              >
-                {monthOptions.map(month => (
-                  <option key={month.value} value={month.value}>{month.label}</option>
-                ))}
-              </select>
-              <select
-                value={selectedYear}
-                onChange={(e) => setSelectedYear(Number(e.target.value))}
-                className="p-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-sm text-gray-900 dark:text-white"
-              >
-                {yearOptions.map(year => (
-                  <option key={year} value={year}>{year}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-200 dark:border-gray-700">
-                  <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 dark:text-gray-400">{t('date')}</th>
-                  <th className="text-right py-3 px-4 text-xs font-medium text-gray-500 dark:text-gray-400">{t('purchases')}</th>
-                  <th className="text-right py-3 px-4 text-xs font-medium text-gray-500 dark:text-gray-400">{t('sales')}</th>
-                  <th className="text-right py-3 px-4 text-xs font-medium text-gray-500 dark:text-gray-400">{t('profit')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredDailyData.length === 0 ? (
-                  <tr>
-                    <td colSpan={4} className="text-center py-8 text-gray-500 dark:text-gray-400">
-                      {t('noDataForPeriod')}
-                    </td>
-                  </tr>
-                ) : (
-                  filteredDailyData.slice(0, 31).map((day, i) => (
-                    <motion.tr
-                      key={day.date}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      transition={{ delay: 0.6 + i * 0.02 }}
-                      className="border-b border-gray-100 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
-                    >
-                      <td className="py-3 px-4 text-gray-900 dark:text-white">{day.displayDate}</td>
-                      <td className="text-right py-3 px-4 text-blue-600 dark:text-blue-400 font-medium">
-                        {formatCurrency(day.purchase)}
-                      </td>
-                      <td className="text-right py-3 px-4 text-green-600 dark:text-green-400 font-medium">
-                        {formatCurrency(day.sales)}
-                      </td>
-                      <td className={`text-right py-3 px-4 font-medium ${
-                        day.profit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
-                      }`}>
-                        {day.profit >= 0 ? '+' : '-'}{formatCurrency(Math.abs(day.profit))}
-                      </td>
-                    </motion.tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </motion.div>
-
-        {/* Statistics Cards */}
-        {/* <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {[
-            { label: t('avgPurchase'), value: monthlyData.reduce((sum, d) => sum + d.avgPurchase, 0) / (monthlyData.length || 1), icon: Package, color: 'blue' },
-            { label: t('avgSale'), value: monthlyData.reduce((sum, d) => sum + d.avgSale, 0) / (monthlyData.length || 1), icon: CreditCard, color: 'green' },
-            { label: t('totalBonusGiven'), value: monthlyData.reduce((sum, d) => sum + d.bonusGiven, 0), icon: Award, color: 'purple' },
-            { label: t('totalBonusReceived'), value: monthlyData.reduce((sum, d) => sum + d.bonusReceived, 0), icon: Gift, color: 'amber' },
-          ].map((stat, i) => {
-            const Icon = stat.icon;
-            const colors = {
-              blue: 'bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400',
-              green: 'bg-green-50 dark:bg-green-500/10 text-green-600 dark:text-green-400',
-              purple: 'bg-purple-50 dark:bg-purple-500/10 text-purple-600 dark:text-purple-400',
-              amber: 'bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400',
-            };
-
-            return (
-              <motion.div
-                key={stat.label}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.7 + i * 0.1 }}
-                className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-4"
-              >
-                <div className="flex items-center gap-3">
-                  <div className={`p-2.5 rounded-xl ${colors[stat.color as keyof typeof colors]}`}>
-                    <Icon className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">{stat.label}</p>
-                    <p className="text-lg font-bold text-gray-900 dark:text-white">
-                      {formatCompactNumber(stat.value)}
-                    </p>
-                  </div>
-                </div>
-              </motion.div>
-            );
-          })}
-        </div> */}
       </div>
     </div>
   );

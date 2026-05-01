@@ -1,4 +1,5 @@
 // pages/ViewResellerPage.tsx
+
 import { useLanguage } from '@/contexts/LanguageContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -27,17 +28,17 @@ import CollectionModal from '@/components/models/collectionModal';
 import SellTopupModal from '@/components/models/sellTopUpModal';
 
 // Statistics Card Component - Smaller Size
-const StatCard = ({ 
-  label, 
-  value, 
-  icon: Icon, 
+const StatCard = ({
+  label,
+  value,
+  icon: Icon,
   color = 'blue',
   trend,
   subValue
-}: { 
-  label: string; 
-  value: string | number; 
-  icon: LucideIcon; 
+}: {
+  label: string;
+  value: string | number;
+  icon: LucideIcon;
   color?: 'blue' | 'green' | 'amber' | 'rose' | 'purple' | 'emerald';
   trend?: { value: number; label: string };
   subValue?: string;
@@ -79,15 +80,17 @@ const StatCard = ({
 };
 
 // Transaction Row Component - Compact for Mobile
-const TransactionRow = ({ 
-  transaction, 
-  type 
-}: { 
-  transaction: TopUpTransaction; 
+const TransactionRow = ({
+  transaction,
+  type,
+  currencyCode = 'AFG'
+}: {
+  transaction: TopUpTransaction;
   type: 'purchase' | 'sale' | 'payment' | 'collection';
+  currencyCode?: string;
 }) => {
   const { t } = useLanguage();
-  
+
   const getTransactionIcon = () => {
     switch (type) {
       case 'purchase': return <ArrowDownLeft className="w-3 h-3 sm:w-4 sm:h-4" />;
@@ -120,7 +123,7 @@ const TransactionRow = ({
     if (diffMins < 60) return `${diffMins}${t('m')}`;
     if (diffHours < 24) return `${diffHours}${t('h')}`;
     if (diffDays < 7) return `${diffDays}${t('d')}`;
-    
+
     return date.toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric'
@@ -128,12 +131,11 @@ const TransactionRow = ({
   };
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-BD', {
-      style: 'currency',
-      currency: 'BDT',
+    const formattedAmount = amount.toLocaleString('en-US', {
       minimumFractionDigits: 0,
-      maximumFractionDigits: 0
-    }).format(amount).replace('BDT', 'AFG');
+      maximumFractionDigits: 2
+    });
+    return `${formattedAmount} ${currencyCode}`;
   };
 
   return (
@@ -153,8 +155,8 @@ const TransactionRow = ({
       </div>
       <div className="text-right shrink-0 ml-2">
         <p className={`text-xs sm:text-sm font-semibold ${
-          type === 'sale' || type === 'collection' 
-            ? 'text-emerald-600 dark:text-emerald-400' 
+          type === 'sale' || type === 'collection'
+            ? 'text-emerald-600 dark:text-emerald-400'
             : 'text-rose-600 dark:text-rose-400'
         }`}>
           {type === 'sale' || type === 'collection' ? '+' : '-'}
@@ -184,6 +186,7 @@ const ViewResellerPage = () => {
   const statistics = useAppSelector((state: RootState) => state.resellers.resellerStatistics);
   const isLoading = useAppSelector((state: RootState) => state.resellers.loading);
   const transactions = useAppSelector((state: RootState) => state.transactions.transactions);
+  const authState = useAppSelector((state: RootState) => state.businessOwner);
 
   const [activeTab, setActiveTab] = useState<'overview' | 'transactions' | 'analytics'>('overview');
   const [showAllTransactions, setShowAllTransactions] = useState(false);
@@ -191,6 +194,18 @@ const ViewResellerPage = () => {
   const [selectedResellerForCollection, setSelectedResellerForCollection] = useState<Reseller | null>(null);
   const [selectedResellerForSell, setSelectedResellerForSell] = useState<Reseller | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+
+  // Get currency code from auth state
+  const currencyCode = authState?.businessOwner?.currency?.code || 'AFG';
+
+  // Format currency with currency code at the end
+  const formatCurrency = (amount: number): string => {
+    const formattedAmount = amount.toLocaleString('en-US', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2
+    });
+    return `${formattedAmount} ${currencyCode}`;
+  };
 
   useEffect(() => {
     if (id) {
@@ -200,14 +215,14 @@ const ViewResellerPage = () => {
 
   const loadResellerData = async () => {
     if (!id) return;
-    
+
     setRefreshing(true);
     await Promise.all([
       dispatch(fetchResellerById(parseInt(id))),
       dispatch(fetchResellerStatistics({ id: parseInt(id) })),
-      dispatch(fetchTransactions({ 
+      dispatch(fetchTransactions({
         reseller_id: parseInt(id),
-        limit: 50 
+        limit: 50
       }))
     ]);
     setRefreshing(false);
@@ -255,22 +270,6 @@ const ViewResellerPage = () => {
     loadResellerData();
   };
 
-  const formatCurrency = (amount: number): string => {
-    return new Intl.NumberFormat('en-BD', {
-      style: 'currency',
-      currency: 'BDT',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
-    }).format(amount).replace('BDT', 'AFG');
-  };
-
-  const formatCompactNumber = (num: number): string => {
-    if (num >= 10000000) return (num / 10000000).toFixed(1) + 'Cr';
-    if (num >= 100000) return (num / 100000).toFixed(1) + 'L';
-    if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
-    return num.toString();
-  };
-
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString('en-US', {
@@ -298,19 +297,19 @@ const ViewResellerPage = () => {
     }
   };
 
-  const resellerTransactions = transactions.filter(tx => 
-    tx.reseller_id === reseller?.id || 
-    (tx.transaction_type === 'sale' && tx.reseller_id === reseller?.id) ||
-    (tx.transaction_type === 'reseller_payment' && tx.reseller_id === reseller?.id)
+  // Filter transactions for this reseller
+  const resellerTransactions = transactions.filter(tx =>
+    tx.reseller_id === reseller?.id
   );
 
   const saleTransactions = resellerTransactions.filter(tx => tx.transaction_type === 'sale');
   const paymentTransactions = resellerTransactions.filter(tx => tx.transaction_type === 'reseller_payment');
 
-  const totalSales = saleTransactions.reduce((sum, tx) => sum + (tx.base_amount || 0), 0);
-  const totalBonus = saleTransactions.reduce((sum, tx) => sum + (tx.bonus_amount || 0), 0);
-  const totalCollected = paymentTransactions.reduce((sum, tx) => sum + (tx.paid_amount || 0), 0);
-  const totalDue = (reseller?.total_due_amount || 0);
+  // Use data from reseller API directly
+  const totalSales = reseller?.total_sell_amount || 0;
+  const totalBonus = (reseller?.total_sell_topup_with_bonus || 0) - (reseller?.total_sell_amount || 0);
+  const totalCollected = reseller?.total_received_amount || 0;
+  const totalDue = reseller?.total_due_amount || 0;
 
   const collectionRate = totalSales > 0 ? ((totalCollected / totalSales) * 100).toFixed(1) : '0';
 
@@ -411,29 +410,28 @@ const ViewResellerPage = () => {
         <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
           <StatCard
             label={t('totalSales')}
-            value={formatCompactNumber(totalSales)}
+            value={formatCurrency(totalSales)}
             icon={TrendingUp}
             color="green"
-            trend={{ value: 12.5, label: t('vsLastMonth') }}
             subValue={`${saleTransactions.length} ${t('transactions')}`}
           />
           <StatCard
             label={t('totalDue')}
-            value={formatCompactNumber(totalDue)}
+            value={formatCurrency(totalDue)}
             icon={AlertCircle}
             color="rose"
-            subValue={`${resellerTransactions.filter(tx => tx.transaction_type === 'sale' && (tx.base_amount - (tx.paid_amount || 0) > 0)).length} ${t('pending')}`}
+            subValue={`${saleTransactions.filter(tx => (tx.base_amount - (tx.paid_amount || 0) > 0)).length} ${t('pending')}`}
           />
           <StatCard
             label={t('totalReceived')}
-            value={formatCompactNumber(totalCollected)}
+            value={formatCurrency(totalCollected)}
             icon={Wallet}
             color="emerald"
             subValue={`${collectionRate}% ${t('collectionRate')}`}
           />
           <StatCard
             label={t('totalBonus')}
-            value={formatCompactNumber(totalBonus)}
+            value={formatCurrency(totalBonus)}
             icon={Gift}
             color="purple"
             subValue={`${reseller.bonus_percentage}% ${t('bonus')}`}
@@ -547,16 +545,16 @@ const ViewResellerPage = () => {
                   <div className="space-y-2 sm:space-y-4">
                     <div className="flex justify-between items-center pb-2 border-b border-gray-100 dark:border-gray-700">
                       <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">{t('totalSales')}</span>
-                      <span className="text-sm sm:text-base font-bold text-gray-900 dark:text-white">{formatCompactNumber(totalSales)}</span>
+                      <span className="text-sm sm:text-base font-bold text-gray-900 dark:text-white">{formatCurrency(totalSales)}</span>
                     </div>
                     <div className="flex justify-between items-center pb-2 border-b border-gray-100 dark:border-gray-700">
                       <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">{t('totalBonus')}</span>
-                      <span className="text-sm sm:text-base font-bold text-purple-600 dark:text-purple-400">{formatCompactNumber(totalBonus)}</span>
+                      <span className="text-sm sm:text-base font-bold text-purple-600 dark:text-purple-400">{formatCurrency(totalBonus)}</span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">{t('totalWithBonus')}</span>
                       <span className="text-sm sm:text-base font-bold text-green-600 dark:text-green-400">
-                        {formatCompactNumber(totalSales + totalBonus)}
+                        {formatCurrency(reseller.total_sell_topup_with_bonus || 0)}
                       </span>
                     </div>
                   </div>
@@ -567,17 +565,17 @@ const ViewResellerPage = () => {
                   <div className="space-y-2 sm:space-y-4">
                     <div className="flex justify-between items-center pb-2 border-b border-gray-100 dark:border-gray-700">
                       <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">{t('totalReceived')}</span>
-                      <span className="text-sm sm:text-base font-bold text-emerald-600 dark:text-emerald-400">{formatCompactNumber(totalCollected)}</span>
+                      <span className="text-sm sm:text-base font-bold text-emerald-600 dark:text-emerald-400">{formatCurrency(totalCollected)}</span>
                     </div>
                     <div className="flex justify-between items-center pb-2 border-b border-gray-100 dark:border-gray-700">
                       <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">{t('totalDue')}</span>
-                      <span className="text-sm sm:text-base font-bold text-rose-600 dark:text-rose-400">{formatCompactNumber(totalDue)}</span>
+                      <span className="text-sm sm:text-base font-bold text-rose-600 dark:text-rose-400">{formatCurrency(totalDue)}</span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">{t('collectionRate')}</span>
                       <div className="flex items-center gap-2">
                         <div className="w-16 sm:w-24 h-1.5 sm:h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                          <div 
+                          <div
                             className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 rounded-full"
                             style={{ width: `${collectionRate}%` }}
                           />
@@ -670,6 +668,7 @@ const ViewResellerPage = () => {
                       key={tx.id}
                       transaction={tx}
                       type={tx.transaction_type === 'sale' ? 'sale' : 'collection'}
+                      currencyCode={currencyCode}
                     />
                   ))
                 )}
@@ -694,19 +693,19 @@ const ViewResellerPage = () => {
                         <div className="flex justify-between text-xs sm:text-sm">
                           <span className="text-gray-600 dark:text-gray-400">{t('totalSales')}</span>
                           <span className="font-medium text-gray-900 dark:text-white">
-                            {formatCompactNumber(statistics.summary?.total_sale_amount || 0)}
+                            {formatCurrency(statistics.summary?.total_sale_amount || 0)}
                           </span>
                         </div>
                         <div className="flex justify-between text-xs sm:text-sm">
                           <span className="text-gray-600 dark:text-gray-400">{t('totalReceived')}</span>
                           <span className="font-medium text-emerald-600 dark:text-emerald-400">
-                            {formatCompactNumber(statistics.summary?.total_received || 0)}
+                            {formatCurrency(statistics.summary?.total_received || 0)}
                           </span>
                         </div>
                         <div className="flex justify-between text-xs sm:text-sm">
                           <span className="text-gray-600 dark:text-gray-400">{t('totalDue')}</span>
                           <span className="font-medium text-rose-600 dark:text-rose-400">
-                            {formatCompactNumber(statistics.summary?.total_due || 0)}
+                            {formatCurrency(statistics.summary?.total_due || 0)}
                           </span>
                         </div>
                         <div className="flex justify-between text-xs sm:text-sm">
@@ -728,37 +727,11 @@ const ViewResellerPage = () => {
                               <p className="text-[9px] sm:text-xs text-gray-500 dark:text-gray-400">{item.transaction_count} {t('transactions')}</p>
                             </div>
                             <div className="text-right shrink-0 ml-2">
-                              <p className="text-xs sm:text-sm font-semibold text-gray-900 dark:text-white">{formatCompactNumber(item.total_purchases)}</p>
-                              <p className="text-[9px] sm:text-xs text-purple-600 dark:text-purple-400">{t('bonus')}: {formatCompactNumber(item.total_with_bonus)}</p>
+                              <p className="text-xs sm:text-sm font-semibold text-gray-900 dark:text-white">{formatCurrency(item.total_purchases)}</p>
+                              <p className="text-[9px] sm:text-xs text-purple-600 dark:text-purple-400">{t('bonus')}: {formatCurrency(item.total_with_bonus)}</p>
                             </div>
                           </div>
                         ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="bg-white dark:bg-gray-800 rounded-lg sm:rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-4 sm:p-6">
-                    <h3 className="text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-400 mb-3 sm:mb-4">{t('dailySummary')}</h3>
-                    <div className="overflow-x-auto -mx-4 sm:mx-0">
-                      <div className="inline-block min-w-full align-middle">
-                        <table className="min-w-full text-xs sm:text-sm">
-                          <thead>
-                            <tr className="border-b border-gray-200 dark:border-gray-700">
-                              <th className="text-left py-2 px-3 sm:py-3 sm:px-4 text-[9px] sm:text-xs font-medium text-gray-500 dark:text-gray-400">{t('date')}</th>
-                              <th className="text-right py-2 px-3 sm:py-3 sm:px-4 text-[9px] sm:text-xs font-medium text-gray-500 dark:text-gray-400">{t('sales')}</th>
-                              <th className="text-right py-2 px-3 sm:py-3 sm:px-4 text-[9px] sm:text-xs font-medium text-gray-500 dark:text-gray-400">{t('collections')}</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {statistics.daily_summary?.slice(0, 10).map((day, index) => (
-                              <tr key={index} className="border-b border-gray-100 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                                <td className="py-2 px-3 sm:py-3 sm:px-4 text-gray-900 dark:text-white text-[9px] sm:text-xs">{day.date}</td>
-                                <td className="text-right py-2 px-3 sm:py-3 sm:px-4 text-green-600 dark:text-green-400 text-[9px] sm:text-xs font-medium">{formatCompactNumber(day.sales)}</td>
-                                <td className="text-right py-2 px-3 sm:py-3 sm:px-4 text-emerald-600 dark:text-emerald-400 text-[9px] sm:text-xs font-medium">{formatCompactNumber(day.collections)}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
                       </div>
                     </div>
                   </div>

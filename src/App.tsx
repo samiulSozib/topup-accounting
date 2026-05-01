@@ -57,7 +57,7 @@ const App = () => (
               } />
 
               <Route path="/subscription-packages" element={<PublicGuard><SubscriptionPackagesPage /></PublicGuard>}/>
-              
+
               {/* Protected Routes - with AuthGuard */}
               <Route element={
                 <AuthGuard>
@@ -70,22 +70,22 @@ const App = () => (
                 <Route path="/suppliers" element={<SuppliersPage />} />
                 <Route path="/buy-topup" element={<BuyTopupPage />} />
                 <Route path="/resellers" element={<ResellersPage />} />
-                
+
                 <Route path="/add-reseller" element={<AddResellerPage />} />
-                
+
                 <Route path="/sell-topup" element={<SellTopupPage />} />
                 <Route path="/resellers/:id" element={<ViewResellerPage />}/>
                 <Route path="/suppliers/:id" element={<ViewSupplierPage />}/>
-                
-                
-                
-                {/* 
-                
+
+
+
+                {/*
+
                 <Route path="/supplier-ledger" element={<SupplierLedgerPage />} />
                 <Route path="/reseller-ledger" element={<ResellerLedgerPage />} />  */}
-                <Route path="/reports" element={<ReportsPage />} /> 
+                <Route path="/reports" element={<ReportsPage />} />
               </Route>
-              
+
               {/* 404 Route */}
               <Route path="*" element={<NotFound />} />
             </Routes>

@@ -1,4 +1,5 @@
 // pages/SuppliersPage.tsx
+
 import { useLanguage } from '@/contexts/LanguageContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -43,6 +44,7 @@ const SuppliersPage = () => {
   const suppliers = useAppSelector((state: RootState) => state.suppliers.suppliers);
   const pagination = useAppSelector((state: RootState) => state.suppliers.pagination);
   const isLoading = useAppSelector((state: RootState) => state.suppliers.loading);
+  const authState = useAppSelector((state: RootState) => state.businessOwner);
 
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
@@ -54,6 +56,18 @@ const SuppliersPage = () => {
   const [selectedSupplierForBuy, setSelectedSupplierForBuy] = useState<Supplier | null>(null);
   const [openDropdownId, setOpenDropdownId] = useState<number | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Get currency code from auth state
+  const currencyCode = authState?.businessOwner?.currency?.code || 'AFG';
+
+  // Format currency with currency code at the end
+  const formatCurrency = (amount: number): string => {
+    const formattedAmount = amount.toLocaleString('en-US', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2
+    });
+    return `${formattedAmount} ${currencyCode}`;
+  };
 
   // Debounce search
   useEffect(() => {
@@ -192,22 +206,6 @@ const SuppliersPage = () => {
     if (due === 0) return 'paid';
     if (due > 0) return 'due';
     return 'paid';
-  };
-
-  const formatCurrency = (amount: number): string => {
-    return new Intl.NumberFormat('en-BD', {
-      style: 'currency',
-      currency: 'BDT',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
-    }).format(amount).replace('BDT', 'AFG');
-  };
-
-  const formatCompactNumber = (num: number): string => {
-    if (num >= 10000000) return (num / 10000000).toFixed(1) + 'Cr';
-    if (num >= 100000) return (num / 100000).toFixed(1) + 'L';
-    if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
-    return num.toString();
   };
 
   const formatDate = (dateString: string) => {
@@ -383,19 +381,19 @@ const SuppliersPage = () => {
                     <div className="text-center">
                       <p className="text-[8px] sm:text-[9px] text-gray-500 dark:text-gray-400">{t('totalBuy')}</p>
                       <p className="text-[10px] sm:text-xs font-medium text-gray-900 dark:text-white">
-                        {formatCompactNumber(totalPurchased)}
+                        {formatCurrency(totalPurchased)}
                       </p>
                     </div>
                     <div className="text-center">
                       <p className="text-[8px] sm:text-[9px] text-gray-500 dark:text-gray-400">{t('withBonus')}</p>
                       <p className="text-[10px] sm:text-xs font-medium text-purple-600 dark:text-purple-400">
-                        {formatCompactNumber(totalWithBonus)}
+                        {formatCurrency(totalWithBonus)}
                       </p>
                     </div>
                     <div className="text-center">
                       <p className="text-[8px] sm:text-[9px] text-gray-500 dark:text-gray-400">{t('stock')}</p>
                       <p className="text-[10px] sm:text-xs font-medium text-blue-600 dark:text-blue-400">
-                        {formatCompactNumber(supplier.current_stock || 0)}
+                        {(supplier.current_stock || 0).toLocaleString()}
                       </p>
                     </div>
                   </div>
@@ -407,7 +405,7 @@ const SuppliersPage = () => {
                       <span className="font-medium text-gray-700 dark:text-gray-300">{paymentRatio}%</span>
                     </div>
                     <div className="h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                      <div 
+                      <div
                         className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 rounded-full"
                         style={{ width: `${paymentRatio}%` }}
                       />
@@ -419,7 +417,7 @@ const SuppliersPage = () => {
                     <div className="flex items-center gap-1 mb-3 sm:mb-4 bg-purple-50 dark:bg-purple-500/10 px-2 py-1 rounded-lg">
                       <Gift className="w-3 h-3 text-purple-600 dark:text-purple-400" />
                       <span className="text-[9px] sm:text-[10px] text-purple-600 dark:text-purple-400">
-                        {t('bonusReceived')}: {formatCompactNumber(bonusReceived)}
+                        {t('bonusReceived')}: {formatCurrency(bonusReceived)}
                       </span>
                     </div>
                   )}
@@ -587,19 +585,19 @@ const SuppliersPage = () => {
                               <div className="grid grid-cols-2 gap-2 text-xs">
                                 <div>
                                   <p className="text-gray-500 dark:text-gray-400">{t('totalBuy')}</p>
-                                  <p className="font-medium text-gray-900 dark:text-white">{formatCompactNumber(totalPurchased)}</p>
+                                  <p className="font-medium text-gray-900 dark:text-white">{formatCurrency(totalPurchased)}</p>
                                 </div>
                                 <div>
                                   <p className="text-gray-500 dark:text-gray-400">{t('withBonus')}</p>
-                                  <p className="font-medium text-purple-600 dark:text-purple-400">{formatCompactNumber(totalWithBonus)}</p>
+                                  <p className="font-medium text-purple-600 dark:text-purple-400">{formatCurrency(totalWithBonus)}</p>
                                 </div>
                                 <div>
                                   <p className="text-gray-500 dark:text-gray-400">{t('stock')}</p>
-                                  <p className="font-medium text-blue-600 dark:text-blue-400">{formatCompactNumber(supplier.current_stock || 0)}</p>
+                                  <p className="font-medium text-blue-600 dark:text-blue-400">{(supplier.current_stock || 0).toLocaleString()}</p>
                                 </div>
                                 <div>
                                   <p className="text-gray-500 dark:text-gray-400">{t('paid')}</p>
-                                  <p className="font-medium text-emerald-600 dark:text-emerald-400">{formatCompactNumber(supplier.total_paid_amount || 0)}</p>
+                                  <p className="font-medium text-emerald-600 dark:text-emerald-400">{formatCurrency(supplier.total_paid_amount || 0)}</p>
                                 </div>
                               </div>
 
@@ -689,13 +687,13 @@ const SuppliersPage = () => {
                         </span>
                       </div>
                       <div className="col-span-2 text-end">
-                        <p className="font-semibold text-gray-900 dark:text-white">{formatCompactNumber(totalPurchased)}</p>
+                        <p className="font-semibold text-gray-900 dark:text-white">{formatCurrency(totalPurchased)}</p>
                         <p className="text-[10px] text-purple-600 dark:text-purple-400">
-                          {t('withBonus')}: {formatCompactNumber(totalWithBonus)}
+                          {t('withBonus')}: {formatCurrency(totalWithBonus)}
                         </p>
                       </div>
                       <div className="col-span-2 text-end">
-                        <p className="font-semibold text-blue-600 dark:text-blue-400">{formatCompactNumber(supplier.current_stock || 0)}</p>
+                        <p className="font-semibold text-blue-600 dark:text-blue-400">{(supplier.current_stock || 0).toLocaleString()}</p>
                         <p className={`text-[10px] ${(supplier.total_due_amount || 0) > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
                           {t('due')}: {formatCurrency(supplier.total_due_amount || 0)}
                         </p>

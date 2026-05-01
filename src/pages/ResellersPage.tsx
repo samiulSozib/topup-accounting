@@ -1,4 +1,5 @@
 // pages/ResellersPage.tsx
+
 import { useLanguage } from '@/contexts/LanguageContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -41,6 +42,7 @@ const ResellersPage = () => {
   const resellers = useAppSelector((state: RootState) => state.resellers.resellers);
   const pagination = useAppSelector((state: RootState) => state.resellers.pagination);
   const isLoading = useAppSelector((state: RootState) => state.resellers.loading);
+  const authState = useAppSelector((state: RootState) => state.businessOwner);
 
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
@@ -52,6 +54,18 @@ const ResellersPage = () => {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [openDropdownId, setOpenDropdownId] = useState<number | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Get currency code from auth state
+  const currencyCode = authState?.businessOwner?.currency?.code || 'AFG';
+
+  // Format currency with currency code at the end
+  const formatCurrency = (amount: number): string => {
+    const formattedAmount = amount.toLocaleString('en-US', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2
+    });
+    return `${formattedAmount} ${currencyCode}`;
+  };
 
   // Debounce search
   useEffect(() => {
@@ -191,22 +205,6 @@ const ResellersPage = () => {
     if (due === 0) return 'paid';
     if (due > 0) return 'due';
     return 'paid';
-  };
-
-  const formatCurrency = (amount: number): string => {
-    return new Intl.NumberFormat('en-BD', {
-      style: 'currency',
-      currency: 'BDT',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
-    }).format(amount).replace('BDT', 'AFG');
-  };
-
-  const formatCompactNumber = (num: number): string => {
-    if (num >= 10000000) return (num / 10000000).toFixed(1) + 'Cr';
-    if (num >= 100000) return (num / 100000).toFixed(1) + 'L';
-    if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
-    return num.toString();
   };
 
   const formatDate = (dateString: string) => {
@@ -382,19 +380,19 @@ const ResellersPage = () => {
                     <div className="text-center">
                       <p className="text-[8px] sm:text-[9px] text-gray-500 dark:text-gray-400">{t('totalSales')}</p>
                       <p className="text-[10px] sm:text-xs font-medium text-gray-900 dark:text-white">
-                        {formatCompactNumber(totalSales)}
+                        {formatCurrency(totalSales)}
                       </p>
                     </div>
                     <div className="text-center">
                       <p className="text-[8px] sm:text-[9px] text-gray-500 dark:text-gray-400">{t('withBonus')}</p>
                       <p className="text-[10px] sm:text-xs font-medium text-purple-600 dark:text-purple-400">
-                        {formatCompactNumber(totalWithBonus)}
+                        {formatCurrency(totalWithBonus)}
                       </p>
                     </div>
                     <div className="text-center">
                       <p className="text-[8px] sm:text-[9px] text-gray-500 dark:text-gray-400">{t('bonusGiven')}</p>
                       <p className="text-[10px] sm:text-xs font-medium text-amber-600 dark:text-amber-400">
-                        {formatCompactNumber(bonusGiven)}
+                        {formatCurrency(bonusGiven)}
                       </p>
                     </div>
                   </div>
@@ -406,7 +404,7 @@ const ResellersPage = () => {
                       <span className="font-medium text-gray-700 dark:text-gray-300">{collectionRatio}%</span>
                     </div>
                     <div className="h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                      <div 
+                      <div
                         className="h-full bg-gradient-to-r from-green-500 to-green-400 rounded-full"
                         style={{ width: `${collectionRatio}%` }}
                       />
@@ -575,20 +573,20 @@ const ResellersPage = () => {
                               <div className="grid grid-cols-2 gap-2 text-xs">
                                 <div>
                                   <p className="text-gray-500 dark:text-gray-400">{t('totalSales')}</p>
-                                  <p className="font-medium text-gray-900 dark:text-white">{formatCompactNumber(totalSales)}</p>
+                                  <p className="font-medium text-gray-900 dark:text-white">{formatCurrency(totalSales)}</p>
                                 </div>
                                 <div>
                                   <p className="text-gray-500 dark:text-gray-400">{t('withBonus')}</p>
-                                  <p className="font-medium text-purple-600 dark:text-purple-400">{formatCompactNumber(totalWithBonus)}</p>
+                                  <p className="font-medium text-purple-600 dark:text-purple-400">{formatCurrency(totalWithBonus)}</p>
                                 </div>
                                 <div>
                                   <p className="text-gray-500 dark:text-gray-400">{t('received')}</p>
-                                  <p className="font-medium text-emerald-600 dark:text-emerald-400">{formatCompactNumber(reseller.total_received_amount || 0)}</p>
+                                  <p className="font-medium text-emerald-600 dark:text-emerald-400">{formatCurrency(reseller.total_received_amount || 0)}</p>
                                 </div>
                                 <div>
                                   <p className="text-gray-500 dark:text-gray-400">{t('due')}</p>
                                   <p className={`font-medium ${(reseller.total_due_amount || 0) > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
-                                    {formatCompactNumber(reseller.total_due_amount || 0)}
+                                    {formatCurrency(reseller.total_due_amount || 0)}
                                   </p>
                                 </div>
                               </div>
@@ -679,9 +677,9 @@ const ResellersPage = () => {
                         </span>
                       </div>
                       <div className="col-span-2 text-end">
-                        <p className="font-semibold text-gray-900 dark:text-white">{formatCompactNumber(totalSales)}</p>
+                        <p className="font-semibold text-gray-900 dark:text-white">{formatCurrency(totalSales)}</p>
                         <p className="text-[10px] text-purple-600 dark:text-purple-400">
-                          {t('withBonus')}: {formatCompactNumber(totalWithBonus)}
+                          {t('withBonus')}: {formatCurrency(totalWithBonus)}
                         </p>
                       </div>
                       <div className="col-span-2 text-end">
@@ -689,7 +687,7 @@ const ResellersPage = () => {
                           {formatCurrency(reseller.total_due_amount || 0)}
                         </p>
                         <p className="text-[10px] text-emerald-600 dark:text-emerald-400">
-                          {t('received')}: {formatCompactNumber(reseller.total_received_amount || 0)}
+                          {t('received')}: {formatCurrency(reseller.total_received_amount || 0)}
                         </p>
                       </div>
                       <div className="col-span-2 text-end relative" ref={dropdownRef}>

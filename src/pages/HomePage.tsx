@@ -6,7 +6,7 @@ import { fetchResellers } from '@/redux/slices/resellerSlice';
 import { fetchSuppliers } from '@/redux/slices/supplierSlice';
 import {
   fetchDashboardSummary,
-  fetchProfitStatistics,
+  fetchProfitReport,
   fetchTransactions,
 } from '@/redux/slices/transactionSlice';
 import { RootState } from '@/redux/store';
@@ -34,39 +34,17 @@ import {
   TrendingDown,
   TrendingUp as TrendingIcon,
   TrendingUp,
-  Truck, Users,
+  Truck,
+  Users,
   Zap
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 
 // Types
 import { Reseller } from '@/type/reseller';
 import { Supplier } from '@/type/supplier';
 import { TopUpTransaction } from '@/type/topUpTransaction';
-
-interface DashboardStats {
-  totalStock: number;
-  totalStockValue: number;
-  supplierDue: number;
-  resellerDue: number;
-  todayProfit: number;
-  monthlyProfit: number;
-  totalPurchaseAmount: number;
-  totalSaleAmount: number;
-  todayPurchaseAmount: number;
-  todaySaleAmount: number;
-  monthlyPurchaseAmount: number;
-  monthlySaleAmount: number;
-  pendingSupplierPayments: number;
-  pendingResellerCollections: number;
-  averageProfitMargin: number;
-  totalBonusReceived: number;
-  totalBonusGiven: number;
-  netBonusImpact: number;
-  totalPurchasedTopup: number;
-  totalSoldTopup: number;
-}
 
 interface QuickAction {
   label: string;
@@ -83,12 +61,13 @@ const HomePage = () => {
   const { t } = useLanguage();
   const dispatch = useAppDispatch();
 
-  // Selectors with proper typing
+  // Selectors
+  const authState = useAppSelector((state: RootState) => state.businessOwner);
   const transactions = useAppSelector((state: RootState) => state.transactions.transactions);
   const suppliers = useAppSelector((state: RootState) => state.suppliers.suppliers);
   const resellers = useAppSelector((state: RootState) => state.resellers.resellers);
-  const profitStats = useAppSelector((state: RootState) => state.transactions.profitStatistics);
   const dashboardSummary = useAppSelector((state: RootState) => state.transactions.dashboardSummary);
+  const profitReport = useAppSelector((state: RootState) => state.transactions.profitReport);
 
   const transactionsLoading = useAppSelector((state: RootState) => state.transactions.loading);
   const suppliersLoading = useAppSelector((state: RootState) => state.suppliers.loading);
@@ -96,70 +75,30 @@ const HomePage = () => {
 
   const isLoading = transactionsLoading || suppliersLoading || resellersLoading;
 
-  const [stats, setStats] = useState<DashboardStats>({
-    totalStock: 0,
-    totalStockValue: 0,
-    supplierDue: 0,
-    resellerDue: 0,
-    todayProfit: 0,
-    monthlyProfit: 0,
-    totalPurchaseAmount: 0,
-    totalSaleAmount: 0,
-    todayPurchaseAmount: 0,
-    todaySaleAmount: 0,
-    monthlyPurchaseAmount: 0,
-    monthlySaleAmount: 0,
-    pendingSupplierPayments: 0,
-    pendingResellerCollections: 0,
-    averageProfitMargin: 0,
-    totalBonusReceived: 0,
-    totalBonusGiven: 0,
-    netBonusImpact: 0,
-    totalPurchasedTopup: 0,
-    totalSoldTopup: 0
-  });
-
   const [showAllActions, setShowAllActions] = useState(false);
-  const [selectedPeriod, setSelectedPeriod] = useState<'today' | 'week' | 'month'>('today');
   const [refreshing, setRefreshing] = useState(false);
 
+  // Get currency code from auth state
+  const currencyCode = authState?.businessOwner?.currency?.code || 'AFG';
+
   // Helper function to parse string values to numbers
-  const parseValue = (value): number => {
+  const parseValue = (value: string | number | undefined): number => {
     if (value === null || value === undefined) return 0;
     if (typeof value === 'number') return value;
     return parseFloat(value) || 0;
   };
 
-  // Date ranges
-  const today = useMemo(() => {
-    const date = new Date();
-    date.setHours(0, 0, 0, 0);
-    return date;
-  }, []);
+  // Format currency with dynamic currency code
+// Format currency with currency code at the end
+const formatCurrency = (amount: number): string => {
+  const currency = currencyCode || 'AFG';
+  const formattedAmount = amount.toLocaleString('en-US', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2
+  });
 
-  const tomorrow = useMemo(() => {
-    const date = new Date(today);
-    date.setDate(date.getDate() + 1);
-    return date;
-  }, [today]);
-
-  const weekStart = useMemo(() => {
-    const date = new Date(today);
-    date.setDate(date.getDate() - 7);
-    return date;
-  }, [today]);
-
-  const monthStart = useMemo(() => {
-    const date = new Date(today.getFullYear(), today.getMonth(), 1);
-    date.setHours(0, 0, 0, 0);
-    return date;
-  }, [today]);
-
-  const monthEnd = useMemo(() => {
-    const date = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-    date.setHours(23, 59, 59, 999);
-    return date;
-  }, [today]);
+  return `${formattedAmount} ${currency}`;
+};
 
   // Load dashboard data
   const loadDashboardData = useCallback(async () => {
@@ -168,8 +107,8 @@ const HomePage = () => {
       dispatch(fetchTransactions({ page: 1, limit: 100 })),
       dispatch(fetchSuppliers({ page: 1, item_per_page: 100 })),
       dispatch(fetchResellers({ page: 1, item_per_page: 100 })),
-      dispatch(fetchProfitStatistics()),
-      dispatch(fetchDashboardSummary())
+      dispatch(fetchDashboardSummary()),
+      dispatch(fetchProfitReport())
     ]);
     setTimeout(() => setRefreshing(false), 1000);
   }, [dispatch]);
@@ -178,301 +117,145 @@ const HomePage = () => {
     loadDashboardData();
   }, [loadDashboardData]);
 
-  // Calculate dashboard stats
-  useEffect(() => {
-    calculateDashboardStats();
-  }, [transactions, profitStats, dashboardSummary]);
+  // Get data directly from API response (no calculations)
+  const summary = dashboardSummary?.summary;
+  const profitAnalysis = summary?.topup_summary?.profit_analysis;
+  const todaySummary = summary?.today;
+  const suppliersData = summary?.suppliers;
+  const resellersData = summary?.resellers;
+  const profitReportData = profitReport?.data;
 
-  const calculateDashboardStats = () => {
-    // Use dashboard summary data if available
-    if (dashboardSummary?.summary) {
-      const summary = dashboardSummary.summary;
+  // Direct values from API (no calculations)
+  const totalStock = parseValue(summary?.topup_summary?.current_stock_quantity);
+  const totalStockValue = parseValue(summary?.topup_summary?.current_stock_value);
+  const supplierDue = parseValue(suppliersData?.total_supplier_due);
+  const resellerDue = parseValue(resellersData?.total_reseller_due);
+  const amountRemainingToCollect = parseValue(resellersData?.amount_remaining_to_collect);
+  const todayProfit = parseValue(todaySummary?.profit?.total_profit);
+  const todayProfitMargin = todaySummary?.profit?.profit_margin || '0';
 
-      // Get values from dashboard summary
-      const totalPurchaseAmount = parseValue(summary.suppliers?.total_purchases);
-      const totalPaidToSuppliers = parseValue(summary.suppliers?.total_paid_to_suppliers);
-      const supplierDueAmount = parseValue(summary.suppliers?.total_supplier_due);
-      const totalStockAmount = parseValue(summary.suppliers?.total_stock);
-      const todayPurchaseAmount = parseValue(summary.today?.purchases);
-      const todaySaleAmount = parseValue(summary.today?.sales);
+  // From profit analysis
+  const totalRevenue = parseValue(profitAnalysis?.total_revenue);
+  const totalCostOfGoodsSold = parseValue(profitAnalysis?.total_cost_of_goods_sold);
+  const totalProfit = parseValue(profitAnalysis?.total_profit);
+  const profitMarginPercentage = profitAnalysis?.profit_margin_percentage || '0';
+  const averageCostPerUnit = parseValue(profitAnalysis?.average_cost_per_unit);
+  const averageSellingPricePerUnit = parseValue(profitAnalysis?.average_selling_price_per_unit);
+  const profitPerUnit = parseValue(profitAnalysis?.profit_per_unit);
+  const remainingStockUnits = parseValue(profitAnalysis?.remaining_stock_units);
+  const remainingStockValue = parseValue(profitAnalysis?.remaining_stock_value);
+  const potentialProfitFromRemaining = parseValue(profitAnalysis?.potential_profit_from_remaining);
+  const totalPurchaseBatches = profitAnalysis?.total_purchase_batches || 0;
+  const totalSalesTransactions = profitAnalysis?.total_sales_transactions || 0;
 
-      // Use profit statistics data
-      const totalRevenue = parseValue(profitStats?.profit_analysis?.total?.revenue);
-      const totalCost = parseValue(profitStats?.profit_analysis?.total?.cost);
-      const totalProfit = parseValue(profitStats?.profit_analysis?.total?.profit);
-      const totalBonusReceived = parseValue(profitStats?.bonus_analysis?.total_bonus_received);
-      const totalBonusGiven = parseValue(profitStats?.bonus_analysis?.total_bonus_given);
-      const netBonusImpact = parseValue(profitStats?.bonus_analysis?.net_bonus_impact);
-      const totalSupplierDue = parseValue(profitStats?.due_analysis?.total_supplier_due);
-      const totalResellerDue = parseValue(profitStats?.due_analysis?.total_reseller_due);
+  // From topup summary
+  const totalMoneySpentOnPurchases = parseValue(summary?.topup_summary?.total_money_spent_on_purchases);
+  const totalQuantityPurchased = parseValue(summary?.topup_summary?.total_quantity_purchased);
+  const totalMoneyReceivedFromSales = parseValue(summary?.topup_summary?.total_money_received_from_sales);
+  const totalQuantitySold = parseValue(summary?.topup_summary?.total_quantity_sold);
+  const totalBonusGiven = parseValue(summary?.topup_summary?.total_bonus_given_to_resellers);
+  const currentStockQuantity = parseValue(summary?.topup_summary?.current_stock_quantity);
+  const currentStockValue = parseValue(summary?.topup_summary?.current_stock_value);
 
-      // Calculate additional metrics
-      const totalSaleAmount = totalRevenue;
-      const monthlyPurchaseAmount = totalPurchaseAmount;
-      const monthlySaleAmount = totalSaleAmount;
+  // From suppliers
+  const totalSuppliers = suppliersData?.total_suppliers || 0;
+  const totalPurchasesAmount = parseValue(suppliersData?.total_purchases_amount);
+  const totalPaidToSuppliers = parseValue(suppliersData?.total_paid_to_suppliers);
+  const totalSupplierDue = parseValue(suppliersData?.total_supplier_due);
+  const totalStockValueFromSuppliers = parseValue(suppliersData?.total_stock_value);
+  const activeSuppliersCount = suppliersData?.active_suppliers || 0;
+  const inactiveSuppliersCount = suppliersData?.inactive_suppliers || 0;
 
-      // Count pending payments from transactions
-      const pendingSupplierPayments = transactions.filter((tx: TopUpTransaction) =>
-        tx.transaction_type === 'purchase' && parseValue(tx.due_amount) > 0
-      ).length;
+  // From resellers
+  const totalResellers = resellersData?.total_resellers || 0;
+  const totalSalesAmount = parseValue(resellersData?.total_sales_amount);
+  const totalReceivedFromResellers = parseValue(resellersData?.total_received_from_resellers);
+  const totalResellerDue = parseValue(resellersData?.total_reseller_due);
+  const activeResellersCount = resellersData?.active_resellers || 0;
+  const inactiveResellersCount = resellersData?.inactive_resellers || 0;
 
-      const pendingResellerCollections = transactions.filter((tx: TopUpTransaction) =>
-        tx.transaction_type === 'sale' && parseValue(tx.due_amount) > 0
-      ).length;
+  // From today summary
+  const todayDate = todaySummary?.date || '';
+  const todayMoneySpent = parseValue(todaySummary?.purchases?.money_spent);
+  const todayQuantityPurchased = parseValue(todaySummary?.purchases?.quantity_purchased);
+  const todayMoneyReceived = parseValue(todaySummary?.sales?.money_received);
+  const todayQuantitySold = parseValue(todaySummary?.sales?.quantity_sold);
+  const todayBonusGiven = parseValue(todaySummary?.sales?.bonus_given);
 
-      // Calculate average profit margin
-      const averageProfitMargin = totalSaleAmount > 0
-        ? ((totalSaleAmount - totalPurchaseAmount) / totalSaleAmount) * 100
-        : 0;
+  // From profit report
+  const profitReportTotalRevenue = parseValue(profitReportData?.total_revenue);
+  const profitReportTotalCost = parseValue(profitReportData?.total_cost);
+  const profitReportTotalProfit = parseValue(profitReportData?.total_profit);
+  const profitReportProfitMargin = profitReportData?.profit_margin || '0%';
+  const profitReportRemainingStockUnits = parseValue(profitReportData?.remaining_stock_units);
+  const profitReportRemainingStockValue = parseValue(profitReportData?.remaining_stock_value);
+  const profitReportTotalSales = profitReportData?.total_sales || 0;
+  const profitReportTotalPurchases = profitReportData?.total_purchases || 0;
 
-      // Calculate total purchased and sold topup from transactions
-      let totalPurchasedTopup = 0;
-      let totalSoldTopup = 0;
+  // Count pending payments from transactions (still needed as not in API)
+  const pendingSupplierPayments = transactions.filter((tx: TopUpTransaction) =>
+    tx.transaction_type === 'purchase' && parseValue(tx.due_amount) > 0
+  ).length;
 
-      transactions.forEach((tx: TopUpTransaction) => {
-        if (tx.transaction_type === 'purchase') {
-          totalPurchasedTopup += parseValue(tx.total_amount);
-        }
-        if (tx.transaction_type === 'sale') {
-          totalSoldTopup += parseValue(tx.total_amount);
-        }
-      });
+  const pendingResellerCollections = transactions.filter((tx: TopUpTransaction) =>
+    tx.transaction_type === 'sale' && parseValue(tx.due_amount) > 0
+  ).length;
 
-      // Calculate total stock value
-      const avgPurchasePrice = totalPurchasedTopup > 0
-        ? totalPurchaseAmount / totalPurchasedTopup
-        : 0;
-      const totalStockValue = totalStockAmount * avgPurchasePrice;
+  // Stock utilization (using direct API values)
+  const stockUtilization = totalQuantityPurchased > 0
+    ? (totalQuantitySold / totalQuantityPurchased) * 100
+    : 0;
 
-      setStats({
-        totalStock: totalStockAmount,
-        totalStockValue,
-        supplierDue: totalSupplierDue,
-        resellerDue: totalResellerDue,
-        todayProfit: parseValue(profitStats?.profit_analysis?.today?.profit) || 0,
-        monthlyProfit: totalProfit,
-        totalPurchaseAmount,
-        totalSaleAmount,
-        todayPurchaseAmount,
-        todaySaleAmount,
-        monthlyPurchaseAmount,
-        monthlySaleAmount,
-        pendingSupplierPayments,
-        pendingResellerCollections,
-        averageProfitMargin,
-        totalBonusReceived,
-        totalBonusGiven,
-        netBonusImpact,
-        totalPurchasedTopup,
-        totalSoldTopup
-      });
-    } else {
-      // Fallback: Calculate from transactions array
-      let totalPurchasedTopup = 0;
-      let totalSoldTopup = 0;
-      let totalPurchaseAmount = 0;
-      let totalSaleAmount = 0;
-      let todayPurchaseAmount = 0;
-      let todaySaleAmount = 0;
-      let weeklyPurchaseAmount = 0;
-      let weeklySaleAmount = 0;
-      let monthlyPurchaseAmount = 0;
-      let monthlySaleAmount = 0;
-      let supplierDue = 0;
-      let resellerDue = 0;
-      let totalBonusReceived = 0;
-      let totalBonusGiven = 0;
-      let pendingSupplierPayments = 0;
-      let pendingResellerCollections = 0;
+  // Collection rate (using direct API values)
+  const collectionRate = totalSalesAmount > 0
+    ? ((totalSalesAmount - resellerDue) / totalSalesAmount) * 100
+    : 0;
 
-      transactions.forEach((tx: TopUpTransaction) => {
-        const txDate = new Date(tx.transaction_date);
-        const baseAmount = parseValue(tx.base_amount);
-        const totalAmount = parseValue(tx.total_amount);
-        const paidAmount = parseValue(tx.paid_amount);
-        const bonusAmount = parseValue(tx.bonus_amount);
-
-        // Purchase transactions
-        if (tx.transaction_type === 'purchase') {
-          totalPurchasedTopup += totalAmount;
-          totalPurchaseAmount += baseAmount;
-          totalBonusReceived += bonusAmount;
-
-          const dueForThisTx = baseAmount - paidAmount;
-          if (dueForThisTx > 0) {
-            supplierDue += dueForThisTx;
-            pendingSupplierPayments++;
-          }
-
-          if (txDate >= today && txDate < tomorrow) {
-            todayPurchaseAmount += baseAmount;
-          }
-          if (txDate >= weekStart) {
-            weeklyPurchaseAmount += baseAmount;
-          }
-          if (txDate >= monthStart && txDate <= monthEnd) {
-            monthlyPurchaseAmount += baseAmount;
-          }
-        }
-
-        // Sale transactions
-        if (tx.transaction_type === 'sale') {
-          totalSoldTopup += totalAmount;
-          totalSaleAmount += baseAmount;
-          totalBonusGiven += bonusAmount;
-
-          const dueForThisTx = baseAmount - paidAmount;
-          if (dueForThisTx > 0) {
-            resellerDue += dueForThisTx;
-            pendingResellerCollections++;
-          }
-
-          if (txDate >= today && txDate < tomorrow) {
-            todaySaleAmount += baseAmount;
-          }
-          if (txDate >= weekStart) {
-            weeklySaleAmount += baseAmount;
-          }
-          if (txDate >= monthStart && txDate <= monthEnd) {
-            monthlySaleAmount += baseAmount;
-          }
-        }
-
-        // Supplier payments (reduce due)
-        if (tx.transaction_type === 'supplier_payment') {
-          supplierDue -= paidAmount;
-          if (supplierDue < 0) supplierDue = 0;
-        }
-
-        // Reseller payments (reduce due)
-        if (tx.transaction_type === 'reseller_payment') {
-          resellerDue -= paidAmount;
-          if (resellerDue < 0) resellerDue = 0;
-        }
-      });
-
-      const avgPurchasePrice = totalPurchasedTopup > 0
-        ? totalPurchaseAmount / totalPurchasedTopup
-        : 0;
-
-      const totalStock = Math.max(0, totalPurchasedTopup - totalSoldTopup);
-      const totalStockValue = totalStock * avgPurchasePrice;
-
-      const selectedPeriodAmount = selectedPeriod === 'today' ? todaySaleAmount :
-                                   selectedPeriod === 'week' ? weeklySaleAmount :
-                                   monthlySaleAmount;
-
-      const selectedPeriodProfit = selectedPeriod === 'today' ? (todaySaleAmount - todayPurchaseAmount) :
-                                   selectedPeriod === 'week' ? (weeklySaleAmount - weeklyPurchaseAmount) :
-                                   (monthlySaleAmount - monthlyPurchaseAmount);
-
-      const averageProfitMargin = totalSaleAmount > 0
-        ? ((totalSaleAmount - totalPurchaseAmount) / totalSaleAmount) * 100
-        : 0;
-
-      setStats({
-        totalStock,
-        totalStockValue,
-        supplierDue: Math.max(0, supplierDue),
-        resellerDue: Math.max(0, resellerDue),
-        todayProfit: todaySaleAmount - todayPurchaseAmount,
-        monthlyProfit: monthlySaleAmount - monthlyPurchaseAmount,
-        totalPurchaseAmount,
-        totalSaleAmount,
-        todayPurchaseAmount,
-        todaySaleAmount,
-        monthlyPurchaseAmount,
-        monthlySaleAmount,
-        pendingSupplierPayments,
-        pendingResellerCollections,
-        averageProfitMargin,
-        totalBonusReceived,
-        totalBonusGiven,
-        netBonusImpact: totalBonusReceived - totalBonusGiven,
-        totalPurchasedTopup,
-        totalSoldTopup
-      });
-    }
-  };
-
-  const formatCurrency = (amount: number): string => {
-    return new Intl.NumberFormat('en-BD', {
-      style: 'currency',
-      currency: 'BDT',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
-    }).format(amount).replace('BDT', 'AFG');
-  };
-
-  const formatCompactNumber = (num: number): string => {
-    if (num >= 10000000) return (num / 10000000).toFixed(1) + 'Cr';
-    if (num >= 100000) return (num / 100000).toFixed(1) + 'L';
-    if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
-    return num.toString();
-  };
-
-  const getProfitColor = (profit: number): string => {
-    return profit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400';
-  };
-
-  const getProfitBg = (profit: number): string => {
-    return profit >= 0 ? 'bg-emerald-50 dark:bg-emerald-500/10' : 'bg-rose-50 dark:bg-rose-500/10';
-  };
+  // Net bonus impact (bonus given is cost)
+  const netBonusImpact = -totalBonusGiven;
 
   const activeSuppliers = suppliers.filter((s: Supplier) => s.status === 1).length;
   const activeResellers = resellers.filter((r: Reseller) => r.status === 1).length;
 
-  // Enhanced Summary Cards - Smaller size
+  // Summary Cards
   const summaryCards = [
     {
       label: t('totalStock'),
-      value: formatCompactNumber(stats.totalStock),
-      unit: '',
-      subValue: formatCurrency(stats.totalStockValue),
+      value: totalStock.toLocaleString(),
+      unit: t('units'),
+      subValue: formatCurrency(totalStockValue),
       icon: Package,
       gradient: 'from-blue-500 to-blue-600',
       bgLight: 'bg-blue-50 dark:bg-blue-500/10',
       textLight: 'text-blue-600 dark:text-blue-400',
-      trend: stats.totalPurchasedTopup > 0 ? ((stats.totalStock / stats.totalPurchasedTopup) * 100).toFixed(1) + '%' : '0%',
-      trendLabel: t('of total'),
-      chart: true
+      trend: totalQuantityPurchased > 0 ? ((totalStock / totalQuantityPurchased) * 100).toFixed(1) + '%' : '0%',
+      trendLabel: t('ofTotal'),
     },
     {
       label: t('supplierDue'),
-      value: formatCurrency(stats.supplierDue),
-      subValue: `${stats.pendingSupplierPayments} ${t('pending')}`,
+      value: formatCurrency(supplierDue),
+      subValue: `${pendingSupplierPayments} ${t('pending')}`,
       icon: TrendingDown,
       gradient: 'from-orange-500 to-orange-600',
       bgLight: 'bg-orange-50 dark:bg-orange-500/10',
       textLight: 'text-orange-600 dark:text-orange-400',
-      alert: stats.supplierDue > 100000,
+      alert: supplierDue > 50000,
       alertMessage: t('highDue')
     },
     {
       label: t('resellerDue'),
-      value: formatCurrency(stats.resellerDue),
-      subValue: `${stats.pendingResellerCollections} ${t('pending')}`,
+      value: formatCurrency(resellerDue),
+      subValue: `${pendingResellerCollections} ${t('pending')}`,
       icon: TrendingUp,
       gradient: 'from-green-500 to-green-600',
       bgLight: 'bg-green-50 dark:bg-green-500/10',
       textLight: 'text-green-600 dark:text-green-400',
-      alert: stats.resellerDue > 100000,
+      alert: resellerDue > 50000,
       alertMessage: t('highDue')
-    },
-    {
-      label: t('todayProfit'),
-      value: formatCurrency(Math.abs(stats.todayProfit)),
-      subValue: stats.todayProfit >= 0 ? t('profit') : t('loss'),
-      icon: stats.todayProfit >= 0 ? TrendingUp : TrendingDown,
-      gradient: stats.todayProfit >= 0 ? 'from-emerald-500 to-emerald-600' : 'from-rose-500 to-rose-600',
-      bgLight: stats.todayProfit >= 0 ? 'bg-emerald-50 dark:bg-emerald-500/10' : 'bg-rose-50 dark:bg-rose-500/10',
-      textLight: stats.todayProfit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400',
-      prefix: stats.todayProfit >= 0 ? '+' : '-',
-      sparkline: true
     },
   ];
 
-  // Enhanced Quick Actions
+  // Quick Actions
   const quickActions: QuickAction[] = [
     {
       label: t('buyTopup'),
@@ -707,7 +490,7 @@ const HomePage = () => {
         </motion.div>
 
         {/* Summary Cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3">
           {summaryCards.map((card, i) => {
             const Icon = card.icon;
 
@@ -742,7 +525,7 @@ const HomePage = () => {
                   <div className="space-y-0.5">
                     <div className="flex items-baseline gap-1 flex-wrap">
                       <p className="text-base sm:text-lg font-bold text-gray-900 dark:text-white">
-                        {card.prefix}{card.value}
+                        {card.value}
                       </p>
                       {card.unit && (
                         <span className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400">{card.unit}</span>
@@ -790,46 +573,87 @@ const HomePage = () => {
                 </h2>
               </div>
 
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                {[
-                  { label: t('revenue'), value: formatCurrency(stats.totalSaleAmount), color: 'emerald' },
-                  { label: t('cost'), value: formatCurrency(stats.totalPurchaseAmount), color: 'rose' },
-                  { label: t('profitMargin'), value: `${stats.averageProfitMargin.toFixed(1)}%`, subValue: t('overall'), color: stats.averageProfitMargin >= 0 ? 'emerald' : 'rose' },
-                  { label: t('netBonus'), value: `${stats.netBonusImpact >= 0 ? '+' : ''}${formatCompactNumber(Math.abs(stats.netBonusImpact))}`, subValue: t('units'), color: stats.netBonusImpact >= 0 ? 'emerald' : 'rose' },
-                ].map((item, i) => (
-                  <div key={i} className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">{item.label}</p>
-                    <p className="text-sm sm:text-base font-bold text-gray-900 dark:text-white">{item.value}</p>
-                    {item.subValue && (
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{item.subValue}</p>
-                    )}
-                  </div>
-                ))}
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">{t('revenue')}</p>
+                  <p className="text-sm sm:text-base font-bold text-gray-900 dark:text-white">
+                    {formatCurrency(totalRevenue)}
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('total')}</p>
+                </div>
+                <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">{t('cost')}</p>
+                  <p className="text-sm sm:text-base font-bold text-gray-900 dark:text-white">
+                    {formatCurrency(totalCostOfGoodsSold)}
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('total')}</p>
+                </div>
+                <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">{t('profitMargin')}</p>
+                  <p className={`text-sm sm:text-base font-bold ${parseFloat(profitMarginPercentage) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                    {profitMarginPercentage}%
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('overall')}</p>
+                </div>
+                {/* <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">{t('netBonus')}</p>
+                  <p className={`text-sm sm:text-base font-bold ${netBonusImpact >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                    {netBonusImpact >= 0 ? '+' : ''}{netBonusImpact.toFixed(0)}
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{t('units')}</p>
+                </div> */}
+              </div>
+
+              {/* Additional Stats from API */}
+              <div className="grid grid-cols-2 gap-3 mt-3">
+                <div className="p-2 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">{t('avgCostPerUnit')}</p>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                    {formatCurrency(averageCostPerUnit)}
+                  </p>
+                </div>
+                <div className="p-2 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">{t('avgSellingPrice')}</p>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                    {formatCurrency(averageSellingPricePerUnit)}
+                  </p>
+                </div>
               </div>
 
               {/* Progress Bars */}
               <div className="mt-4 space-y-3">
-                {[
-                  { label: t('stockUtilization'), value: stats.totalPurchasedTopup > 0 ? (stats.totalSoldTopup / stats.totalPurchasedTopup) * 100 : 0, color: 'blue' },
-                  { label: t('collectionRate'), value: stats.totalSaleAmount > 0 ? ((stats.totalSaleAmount - stats.resellerDue) / stats.totalSaleAmount) * 100 : 0, color: 'emerald' },
-                ].map((item, i) => (
-                  <div key={i}>
-                    <div className="flex items-center justify-between text-xs mb-1">
-                      <span className="text-gray-600 dark:text-gray-400">{item.label}</span>
-                      <span className="font-medium text-gray-900 dark:text-white">
-                        {item.value.toFixed(1)}%
-                      </span>
-                    </div>
-                    <div className="h-1.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
-                      <motion.div
-                        initial={{ width: 0 }}
-                        animate={{ width: `${item.value}%` }}
-                        transition={{ duration: 1, delay: 0.5 + i * 0.2 }}
-                        className={`h-full bg-gradient-to-r from-${item.color}-500 to-${item.color}-400 rounded-full`}
-                      />
-                    </div>
+                <div>
+                  <div className="flex items-center justify-between text-xs mb-1">
+                    <span className="text-gray-600 dark:text-gray-400">{t('stockUtilization')}</span>
+                    <span className="font-medium text-gray-900 dark:text-white">
+                      {stockUtilization.toFixed(1)}%
+                    </span>
                   </div>
-                ))}
+                  <div className="h-1.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: `${stockUtilization}%` }}
+                      transition={{ duration: 1, delay: 0.5 }}
+                      className="h-full bg-gradient-to-r from-blue-500 to-blue-400 rounded-full"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <div className="flex items-center justify-between text-xs mb-1">
+                    <span className="text-gray-600 dark:text-gray-400">{t('collectionRate')}</span>
+                    <span className="font-medium text-gray-900 dark:text-white">
+                      {collectionRate.toFixed(1)}%
+                    </span>
+                  </div>
+                  <div className="h-1.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: `${collectionRate}%` }}
+                      transition={{ duration: 1, delay: 0.7 }}
+                      className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 rounded-full"
+                    />
+                  </div>
+                </div>
               </div>
             </motion.div>
 
@@ -844,7 +668,7 @@ const HomePage = () => {
                 <div className="p-1.5 bg-purple-50 dark:bg-purple-500/10 rounded-lg">
                   <Clock className="w-4 h-4 text-purple-600 dark:text-purple-400" />
                 </div>
-                {t('todayActivity')}
+                {t('todayActivity')} - {todayDate}
               </h2>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -854,15 +678,11 @@ const HomePage = () => {
                     <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">{t('purchases')}</p>
                   </div>
                   <p className="text-base sm:text-lg font-bold text-gray-900 dark:text-white">
-                    {formatCurrency(stats.todayPurchaseAmount)}
+                    {formatCurrency(todayMoneySpent)}
                   </p>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 flex items-center gap-1">
                     <Package className="w-3 h-3" />
-                    {transactions.filter((t: TopUpTransaction) =>
-                      t.transaction_type === 'purchase' &&
-                      new Date(t.transaction_date) >= today &&
-                      new Date(t.transaction_date) < tomorrow
-                    ).length} {t('transactions')}
+                    {todayQuantityPurchased.toLocaleString()} {t('units')} · {todayBonusGiven > 0 ? `+${todayBonusGiven.toLocaleString()} ${t('bonus')}` : ''}
                   </p>
                 </div>
 
@@ -872,33 +692,27 @@ const HomePage = () => {
                     <p className="text-xs text-green-600 dark:text-green-400 font-medium">{t('sales')}</p>
                   </div>
                   <p className="text-base sm:text-lg font-bold text-gray-900 dark:text-white">
-                    {formatCurrency(stats.todaySaleAmount)}
+                    {formatCurrency(todayMoneyReceived)}
                   </p>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 flex items-center gap-1">
                     <Users className="w-3 h-3" />
-                    {transactions.filter((t: TopUpTransaction) =>
-                      t.transaction_type === 'sale' &&
-                      new Date(t.transaction_date) >= today &&
-                      new Date(t.transaction_date) < tomorrow
-                    ).length} {t('transactions')}
+                    {todayQuantitySold.toLocaleString()} {t('units')} · {todayBonusGiven > 0 ? `${todayBonusGiven.toLocaleString()} ${t('bonusGiven')}` : ''}
                   </p>
                 </div>
               </div>
 
-              <div className={`mt-3 p-3 ${getProfitBg(stats.todayProfit)} rounded-lg`}>
+              <div className={`mt-3 p-3 ${parseFloat(todayProfit.toString()) >= 0 ? 'bg-emerald-50 dark:bg-emerald-500/10' : 'bg-rose-50 dark:bg-rose-500/10'} rounded-lg`}>
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div>
                     <p className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">{t('todayProfit')}</p>
-                    <p className={`text-base sm:text-lg font-bold ${getProfitColor(stats.todayProfit)}`}>
-                      {stats.todayProfit >= 0 ? '+' : '-'}{formatCurrency(Math.abs(stats.todayProfit))}
+                    <p className={`text-base sm:text-lg font-bold ${parseFloat(todayProfit.toString()) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                      {formatCurrency(Math.abs(todayProfit))}
                     </p>
                   </div>
                   <div className="text-left sm:text-right">
                     <p className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">{t('profitMargin')}</p>
-                    <p className={`text-sm sm:text-base font-bold ${getProfitColor(stats.todayProfit)}`}>
-                      {stats.todaySaleAmount > 0
-                        ? ((stats.todayProfit / stats.todaySaleAmount) * 100).toFixed(1)
-                        : 0}%
+                    <p className={`text-sm sm:text-base font-bold ${parseFloat(todayProfit.toString()) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                      {todayProfitMargin}%
                     </p>
                   </div>
                 </div>
@@ -1003,7 +817,7 @@ const HomePage = () => {
 
               <div className="p-4 space-y-3">
                 <AnimatePresence>
-                  {stats.supplierDue > 50000 && (
+                  {supplierDue > 50000 && (
                     <motion.div
                       initial={{ opacity: 0, x: -20 }}
                       animate={{ opacity: 1, x: 0 }}
@@ -1018,7 +832,7 @@ const HomePage = () => {
                           {t('highSupplierDue')}
                         </p>
                         <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5 truncate">
-                          {formatCurrency(stats.supplierDue)} {t('due')} · {stats.pendingSupplierPayments} {t('payments')}
+                          {formatCurrency(supplierDue)} {t('due')} · {pendingSupplierPayments} {t('payments')}
                         </p>
                         <Link
                           to="/supplier-payment"
@@ -1031,7 +845,7 @@ const HomePage = () => {
                     </motion.div>
                   )}
 
-                  {stats.resellerDue > 50000 && (
+                  {resellerDue > 50000 && (
                     <motion.div
                       initial={{ opacity: 0, x: -20 }}
                       animate={{ opacity: 1, x: 0 }}
@@ -1046,7 +860,7 @@ const HomePage = () => {
                           {t('highResellerDue')}
                         </p>
                         <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5 truncate">
-                          {formatCurrency(stats.resellerDue)} {t('due')} · {stats.pendingResellerCollections} {t('collections')}
+                          {formatCurrency(resellerDue)} {t('due')} · {pendingResellerCollections} {t('collections')}
                         </p>
                         <Link
                           to="/reseller-payment"
@@ -1059,7 +873,7 @@ const HomePage = () => {
                     </motion.div>
                   )}
 
-                  {stats.totalStock < 1000 && stats.totalPurchasedTopup > 0 && (
+                  {totalStock < 1000 && totalQuantityPurchased > 0 && (
                     <motion.div
                       initial={{ opacity: 0, x: -20 }}
                       animate={{ opacity: 1, x: 0 }}
@@ -1074,7 +888,7 @@ const HomePage = () => {
                           {t('lowStock')}
                         </p>
                         <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5 truncate">
-                          {stats.totalStock} {t('unitsRemaining')}
+                          {totalStock.toLocaleString()} {t('unitsRemaining')}
                         </p>
                         <Link
                           to="/buy-topup"
@@ -1087,7 +901,7 @@ const HomePage = () => {
                     </motion.div>
                   )}
 
-                  {stats.pendingSupplierPayments === 0 && stats.pendingResellerCollections === 0 && stats.totalStock >= 1000 && (
+                  {pendingSupplierPayments === 0 && pendingResellerCollections === 0 && totalStock >= 1000 && (
                     <motion.div
                       initial={{ opacity: 0, x: -20 }}
                       animate={{ opacity: 1, x: 0 }}
@@ -1127,37 +941,61 @@ const HomePage = () => {
               </div>
 
               <div className="p-4 space-y-3">
-                {[
-                  { label: t('activeSuppliers'), value: `${activeSuppliers}/${suppliers.length}`, icon: Truck, color: 'blue' },
-                  { label: t('activeResellers'), value: `${activeResellers}/${resellers.length}`, icon: Users, color: 'green' },
-                  { label: t('totalTransactions'), value: transactions.length, icon: Layers, color: 'purple' },
-                ].map((item, i) => {
-                  const Icon = item.icon;
-                  const colors = {
-                    blue: 'bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400',
-                    green: 'bg-green-50 dark:bg-green-500/10 text-green-600 dark:text-green-400',
-                    purple: 'bg-purple-50 dark:bg-purple-500/10 text-purple-600 dark:text-purple-400',
-                    amber: 'bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400',
-                  };
-
-                  return (
-                    <motion.div
-                      key={item.label}
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: 0.9 + i * 0.1 }}
-                      className="flex items-center justify-between"
-                    >
-                      <div className="flex items-center gap-2">
-                        <div className={`p-1 rounded-lg ${colors[item.color as keyof typeof colors]}`}>
-                          <Icon className="w-2.5 h-2.5" />
-                        </div>
-                        <span className="text-xs text-gray-600 dark:text-gray-400">{item.label}</span>
-                      </div>
-                      <span className="text-sm font-semibold text-gray-900 dark:text-white">{item.value}</span>
-                    </motion.div>
-                  );
-                })}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1 rounded-lg bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400">
+                      <Truck className="w-2.5 h-2.5" />
+                    </div>
+                    <span className="text-xs text-gray-600 dark:text-gray-400">{t('activeSuppliers')}</span>
+                  </div>
+                  <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                    {activeSuppliersCount}/{totalSuppliers}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1 rounded-lg bg-green-50 dark:bg-green-500/10 text-green-600 dark:text-green-400">
+                      <Users className="w-2.5 h-2.5" />
+                    </div>
+                    <span className="text-xs text-gray-600 dark:text-gray-400">{t('activeResellers')}</span>
+                  </div>
+                  <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                    {activeResellersCount}/{totalResellers}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1 rounded-lg bg-purple-50 dark:bg-purple-500/10 text-purple-600 dark:text-purple-400">
+                      <Layers className="w-2.5 h-2.5" />
+                    </div>
+                    <span className="text-xs text-gray-600 dark:text-gray-400">{t('totalTransactions')}</span>
+                  </div>
+                  <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                    {transactions.length}
+                  </span>
+                </div>
+                {/* <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1 rounded-lg bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                      <Package className="w-2.5 h-2.5" />
+                    </div>
+                    <span className="text-xs text-gray-600 dark:text-gray-400">{t('purchaseBatches')}</span>
+                  </div>
+                  <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                    {totalPurchaseBatches}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                      <CreditCard className="w-2.5 h-2.5" />
+                    </div>
+                    <span className="text-xs text-gray-600 dark:text-gray-400">{t('salesTransactions')}</span>
+                  </div>
+                  <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                    {totalSalesTransactions}
+                  </span>
+                </div> */}
               </div>
 
               <div className="p-4 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700/50 dark:to-gray-800 border-t border-gray-200 dark:border-gray-700">
